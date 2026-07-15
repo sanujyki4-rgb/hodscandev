@@ -20,11 +20,14 @@ export interface TransactionSummary {
   txType: string;
   functionSelector: string | null;
   /**
-   * NOT YET PROVIDED BY BACKEND — see docs/BACKEND_TODO.md.
    * The real Ethereum L1 transaction hash that created this L1→L2
-   * message (via the Inbox/bridge contract's retryable ticket).
-   * Optional/nullable on purpose: UI must render correctly whether
-   * this is present or not, since backend doesn't send it yet.
+   * message (via the Bridge contract's retryable ticket, txType
+   * "0x69"). Populated by apps/indexer's jobs/watchL1Messages.ts,
+   * which watches the Bridge contract on L1 and links messages back
+   * to their L2 tx via requestId (see L1ToL2Message in the Prisma
+   * schema). Still nullable: the L1 watcher runs on its own interval
+   * and may not have matched a very recent message yet, and messages
+   * from before the watcher started won't be linked unless backfilled.
    */
   l1TxHash?: string | null;
   block?: {
@@ -56,6 +59,25 @@ export interface BlockDetail extends BlockSummary {
   transactions: TransactionSummary[];
 }
 
+/**
+ * One row of an L1->L2 message (Bridge contract retryable ticket).
+ * Unlike TransactionSummary, this does NOT always have an L2 side —
+ * a message can exist on L1 (status "initiated", l2TxHash null)
+ * before its ticket has landed on Robinhood Chain at all. Mirrors
+ * Arbiscan's txsDeposits: "Pending Confirmation" rows are real rows
+ * here too, not an error state.
+ */
+export interface L1ToL2MessageSummary {
+  id: string; // queue index, from the L1 Bridge contract's MessageDelivered event
+  originBlockNumber: string; // L1 (Ethereum) block number
+  originTxHash: string; // L1 transaction hash
+  originAddress: string; // L1 sender ("L1 Tx Origin")
+  originTimestamp: string;
+  status: "initiated" | "relayed";
+  l2TxHash: string | null; // null while status is "initiated"
+  l2Block: { number: string; timestamp: string | null; isFinalized: boolean } | null;
+}
+
 async function apiFetch<T>(path: string, revalidate = 5): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -78,12 +100,12 @@ export function getLatestTransactions(limit = 15) {
 }
 
 export function getLatestL1ToL2Transactions(limit = 15) {
-  return apiFetch<TransactionSummary[]>(`/transactions/l1-to-l2?limit=${limit}`, 2);
+  return apiFetch<L1ToL2MessageSummary[]>(`/transactions/l1-to-l2?limit=${limit}`, 2);
 }
 
 export function getPaginatedL1ToL2Transactions(limit = 25, offset = 0) {
   return apiFetch<{
-    transactions: TransactionSummary[];
+    transactions: L1ToL2MessageSummary[];
     total: number;
     limit: number;
     offset: number;

@@ -1,4 +1,5 @@
 import { createPublicClient, http, defineChain } from "viem";
+import { providers } from "ethers";
 import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
 
 /**
@@ -29,3 +30,17 @@ export const rpcClient = createPublicClient({
     timeout: 10_000,
   }),
 });
+
+/**
+ * Ethers v5 provider for the same L2 RPC. Required by @arbitrum/sdk
+ * (ParentTransactionReceipt.getParentToChildMessages), which calls
+ * provider.getNetwork() — something viem's PublicClient does not expose.
+ * Static network avoids an extra eth_chainId on every SDK call.
+ */
+export const l2EthersProvider = new providers.JsonRpcProvider(
+  RPC_URL_MAINNET,
+  {
+    name: "Robinhood Chain",
+    chainId: ROBINHOOD_CHAIN_ID,
+  }
+);

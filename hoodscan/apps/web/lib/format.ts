@@ -32,6 +32,7 @@ export function txTypeLabel(type: string): string {
   const labels: Record<string, string> = {
     "0x0": "Legacy",
     "0x2": "EIP-1559",
+    "0x69": "L1↔L2 Message",
     "0x6a": "System",
   };
   return labels[type] ?? type;

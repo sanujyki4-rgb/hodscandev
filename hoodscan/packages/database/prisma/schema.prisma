@@ -44,10 +44,36 @@ model Transaction {
 
   input                 String   // raw calldata, can be long
   functionSelector      String?  // first 4 bytes of input, for fast filtering
-  txType                String   // '0x0', '0x2', '0x6a', etc.
+  txType                String   // '0x0', '0x2', '0x69' (ArbitrumSubmitRetryableTx = real L1->L2 message), '0x6a' (ArbitrumInternalTx = ArbOS per-block housekeeping, NOT an L1->L2 message), etc.
+  requestId             String?  // only set for txType '0x69' — matched against L1ToL2Message.requestId
+
+  l1ToL2Message         L1ToL2Message?
 
   @@index([blockNumber])
   @@index([fromAddress])
   @@index([toAddress])
   @@index([functionSelector])
+  @@index([requestId])
+}
+
+// Tracks Robinhood Chain's L1->L2 retryable-ticket messages, indexed
+// separately from `Transaction` because the source of truth lives on
+// Ethereum L1 (the Bridge contract's `MessageDelivered` event), not on
+// Robinhood Chain itself. One row is created the moment the message is
+// observed on L1 (status: "initiated"); `l2TxHash` and status "relayed"
+// are filled in once the matching txType "0x69" transaction is seen on
+// L2 (matched via `requestId`, computed by @arbitrum/sdk from the L1 tx).
+model L1ToL2Message {
+  id                 BigInt   @id            // messageIndex from the L1 Bridge contract's MessageDelivered event
+  requestId          String   @unique        // retryable ticket id, computed by @arbitrum/sdk (L1TransactionReceipt.getL1ToL2Messages) from the real L1 tx data — matched against Transaction.requestId
+  originTxHash       String                  // the real L1 (Ethereum) transaction hash — this is what the frontend shows as "L1 Tx"
+  originBlockNumber  BigInt
+  originTimestamp    DateTime
+  originAddress      String                  // L1 sender (msg.sender on the Bridge/Inbox call)
+
+  l2TxHash           String?  @unique
+  transaction        Transaction? @relation(fields: [l2TxHash], references: [hash])
+  status             String   @default("initiated") // initiated | relayed
+
+  @@index([originBlockNumber])
 }

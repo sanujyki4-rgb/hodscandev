@@ -24,6 +24,11 @@ export interface RawTransaction {
   r?: string;
   s?: string;
   accessList?: unknown[];
+  // Only present on Arbitrum-native tx types ("0x68"-"0x6a"). For
+  // txType "0x69" (ArbitrumSubmitRetryableTxType), this is the id
+  // used to match this L2 tx back to its originating L1 message —
+  // see L1ToL2Message in the Prisma schema and jobs/watchL1Messages.ts.
+  requestId?: string;
 }
 
 /**
@@ -43,15 +48,21 @@ export interface DecodedTransaction {
   maxPriorityFeePerGas: string | null;
   input: string;
   functionSelector: string | null; // first 4 bytes of input, e.g. "0x095ea7b3"
-  txType: string; // "0x0", "0x2", "0x6a" (Arbitrum system tx), etc.
+  txType: string; // "0x0", "0x2", "0x69" (real L1->L2 retryable ticket), "0x6a" (Arbitrum internal/housekeeping tx), etc.
+  requestId: string | null; // only set for txType "0x69"
 }
 
 /**
  * Known Arbitrum/Robinhood Chain transaction types worth labeling
  * distinctly in the UI, based on what we've observed on mainnet.
+ * Verified against Alchemy's Arbitrum/Ethereum API differences doc
+ * and the go-ethereum-arbitrum source (core/types transaction type
+ * constants) — "0x69" is the real L1->L2 message type; "0x6a" is
+ * NOT an L1->L2 message, it's ArbOS's own per-block housekeeping tx.
  */
 export const TX_TYPE_LABELS: Record<string, string> = {
   "0x0": "Legacy",
   "0x2": "EIP-1559",
-  "0x6a": "System (L1↔L2 sync)",
+  "0x69": "L1↔L2 Message",
+  "0x6a": "System",
 };

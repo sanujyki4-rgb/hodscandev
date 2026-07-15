@@ -90,7 +90,7 @@ export default async function HomePage() {
               Couldn&apos;t reach the hoodscan API.
             </p>
           ) : (
-            <L1L2Table transactions={l1ToL2Transactions} viewAllHref="/transactions/l1-to-l2" />
+            <L1L2Table messages={l1ToL2Transactions} viewAllHref="/transactions/l1-to-l2" />
           )}
         </div>
       </div>

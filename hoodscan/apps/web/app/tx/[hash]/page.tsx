@@ -24,6 +24,7 @@ export default async function TransactionPage({
   if (!tx) notFound();
 
   const isSystemTx = tx.txType === "0x6a";
+  const isL1ToL2 = tx.txType === "0x69";
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,7 +35,12 @@ export default async function TransactionPage({
         <div className="flex items-center gap-2">
           {isSystemTx && (
             <span className="rounded-full bg-muted/15 px-2.5 py-1 text-xs font-medium text-muted">
-              System tx (L1↔L2 sync)
+              System tx
+            </span>
+          )}
+          {isL1ToL2 && (
+            <span className="rounded-full bg-lime/15 px-2.5 py-1 text-xs font-medium text-lime">
+              L1↔L2 Message
             </span>
           )}
           <span
@@ -61,6 +67,25 @@ export default async function TransactionPage({
         />
         <DetailRow label="Timestamp" value={timeAgo(tx.block.timestamp)} />
         <DetailRow label="Type" value={tx.txTypeLabel} />
+        {isL1ToL2 && (
+          <DetailRow
+            label="L1 Transaction"
+            value={
+              tx.l1TxHash ? (
+                <a
+                  href={`https://etherscan.io/tx/${tx.l1TxHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-lime hover:underline"
+                >
+                  {tx.l1TxHash}
+                </a>
+              ) : (
+                <span className="italic text-muted">Not indexed yet</span>
+              )
+            }
+          />
+        )}
         <DetailRow
           label="From"
           value={

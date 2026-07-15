@@ -83,5 +83,6 @@ export function decodeTransaction(raw: RawTransaction): DecodedTransaction {
     input: raw.input,
     functionSelector: extractFunctionSelector(raw.input),
     txType: raw.type,
+    requestId: raw.requestId ?? null,
   };
 }

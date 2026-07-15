@@ -23,8 +23,9 @@ export default async function AllL1ToL2Page({
           All L1↔L2 messages
         </h1>
         <p className="mt-1 text-sm text-muted">
-          Arbitrum-style system transactions that sync state between
-          Ethereum L1 and Robinhood Chain.
+          Retryable tickets submitted via the Bridge contract on Ethereum L1
+          — deposits and other cross-chain calls into Robinhood Chain.
+          Includes messages still awaiting confirmation on L2.
         </p>
       </div>
 
@@ -34,7 +35,7 @@ export default async function AllL1ToL2Page({
         </p>
       ) : (
         <>
-          <L1L2Table transactions={data.transactions} />
+          <L1L2Table messages={data.transactions} variant="detailed" />
           <Pagination
             basePath="/transactions/l1-to-l2"
             page={page}

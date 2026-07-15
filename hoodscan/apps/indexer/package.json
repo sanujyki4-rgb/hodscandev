@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "test:l1": "dotenv -e ../../.env -- tsx scripts/testWatchL1Message.ts"
   },
   "dependencies": {
     "@hoodscan/database": "workspace:*",
     "@hoodscan/types": "workspace:*",
     "@hoodscan/config": "workspace:*",
+    "@arbitrum/sdk": "^4.0.0",
+    "ethers": "^5.7.2",
     "viem": "^2.21.0"
   },
   "devDependencies": {
