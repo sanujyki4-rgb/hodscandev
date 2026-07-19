@@ -9,3 +9,8 @@ dist/
 
 *.tsbuildinfo
 
+# Stray build/debug output files
+idxcheck.txt
+tsc_tokenresolver_out.txt
+tsc_*_out.txt
+
