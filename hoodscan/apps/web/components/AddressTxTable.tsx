@@ -1,27 +1,40 @@
 import Link from "next/link";
 import type { TransactionSummary } from "@/lib/api";
 import {
-  shortenHash,
+  displayAddress,
   weiToEth,
   timeAgo,
   methodLabel,
-  approxTxnFeeEth,
+  resolvedTxnFee,
+  TXN_FEE_TOOLTIP,
+  shortenHash,
 } from "@/lib/format";
+import { tableRowClass } from "@/lib/tableStyles";
+import { EmptyState } from "./EmptyState";
+import { Badge } from "./Badge";
+import { Chip } from "./Chip";
 import { CopyIconButton } from "./CopyIconButton";
+import { ContractIcon } from "./ContractIcon";
 
-/** From/To cell: hash + copy; profile address not clickable. */
+/** From/To cell: hash (or friendly label) + copy; profile address not clickable. */
 function PartyAddress({
   value,
   isSelf,
+  label,
+  isContract,
 }: {
   value: string;
   isSelf: boolean;
+  label?: string | null;
+  isContract?: boolean | null;
 }) {
+  const display = displayAddress(value, label);
   return (
     <span className="inline-flex items-center gap-1">
+      {isContract ? <ContractIcon /> : null}
       {isSelf ? (
         <span className="cursor-text font-medium text-ink" title={value}>
-          {shortenHash(value, 4)}
+          {display}
         </span>
       ) : (
         <Link
@@ -29,7 +42,7 @@ function PartyAddress({
           className="text-muted hover:text-lime"
           title={value}
         >
-          {shortenHash(value, 4)}
+          {display}
         </Link>
       )}
       <CopyIconButton value={value} label="Copy address" />
@@ -53,11 +66,7 @@ export function AddressTxTable({
   const addr = address.toLowerCase();
 
   if (transactions.length === 0) {
-    return (
-      <p className="rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm text-muted">
-        No transactions found for this address in the indexed range.
-      </p>
-    );
+    return <EmptyState message="No transactions found for this address in the indexed range." />;
   }
 
   return (
@@ -85,15 +94,10 @@ export function AddressTxTable({
               const isIn = to === addr;
               const direction =
                 isOut && isIn ? "SELF" : isOut ? "OUT" : isIn ? "IN" : "—";
-              const fee = approxTxnFeeEth(tx.gas, tx.gasPrice, tx.maxFeePerGas);
+              const { value: fee, isActual: isActualFee } = resolvedTxnFee(tx);
 
               return (
-                <tr
-                  key={tx.hash}
-                  className={`group h-[52px] whitespace-nowrap border-l-2 border-l-transparent transition hover:border-l-lime-bright hover:bg-lime-bright/[0.03] ${
-                    i % 2 === 1 ? "bg-surface/40" : ""
-                  }`}
-                >
+                <tr key={tx.hash} className={tableRowClass(i)}>
                   <td className="px-4 py-2.5 text-sm">
                     <span className="inline-flex items-center gap-1">
                       <Link
@@ -106,9 +110,7 @@ export function AddressTxTable({
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-sm">
-                    <span className="rounded-md bg-muted/10 px-1.5 py-0.5 text-sm text-ink">
-                      {methodLabel(tx.functionSelector, tx.txType)}
-                    </span>
+                    <Chip>{tx.method ?? methodLabel(tx.functionSelector, tx.txType)}</Chip>
                   </td>
                   <td className="nums px-4 py-2.5 text-sm">
                     <Link
@@ -122,26 +124,21 @@ export function AddressTxTable({
                     {tx.block?.timestamp ? timeAgo(tx.block.timestamp) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-sm">
-                    <PartyAddress value={tx.fromAddress} isSelf={isOut} />
+                    <PartyAddress value={tx.fromAddress} isSelf={isOut} label={tx.fromLabel} isContract={tx.fromIsContract} />
                   </td>
                   <td className="px-1 py-2.5 text-center">
-                    <span
-                      className={`inline-block min-w-[2.5rem] rounded px-1.5 py-0.5 text-center text-sm font-medium tracking-wide ${
-                        direction === "IN"
-                          ? "bg-lime/15 text-lime"
-                          : direction === "OUT"
-                            ? "bg-warning/15 text-warning"
-                            : "bg-muted/15 text-muted"
-                      }`}
+                    <Badge
+                      tone={direction === "IN" ? "positive" : direction === "OUT" ? "warning" : "muted"}
+                      className="inline-block min-w-[2.5rem] rounded px-1.5 py-0.5 text-center tracking-wide"
                     >
                       {direction}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-4 py-2.5 text-sm">
                     {!tx.toAddress ? (
                       <span className="text-sm text-muted">Contract Creation</span>
                     ) : (
-                      <PartyAddress value={tx.toAddress} isSelf={isIn} />
+                      <PartyAddress value={tx.toAddress} isSelf={isIn} label={tx.toLabel} isContract={tx.toIsContract} />
                     )}
                   </td>
                   <td className="nums px-4 py-2.5 text-sm text-ink">
@@ -149,7 +146,7 @@ export function AddressTxTable({
                   </td>
                   <td
                     className="nums px-4 py-2.5 text-sm text-muted"
-                    title="Approx. gas × gas price (gas used not indexed yet)"
+                    title={isActualFee ? TXN_FEE_TOOLTIP.actual : TXN_FEE_TOOLTIP.approx}
                   >
                     {fee !== null ? `${fee} ETH` : "—"}
                   </td>

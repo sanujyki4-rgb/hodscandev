@@ -31,6 +31,8 @@ export async function saveTransactions(transactions: DecodedTransaction[]) {
       functionSelector: tx.functionSelector,
       txType: tx.txType,
       requestId: tx.requestId,
+      gasUsed: tx.gasUsed,
+      effectiveGasPrice: tx.effectiveGasPrice,
     })),
     skipDuplicates: true,
   });
@@ -44,4 +46,24 @@ export async function saveTransactions(transactions: DecodedTransaction[]) {
   }
 
   return result;
+}
+
+/**
+ * Backfill receipt-derived fee fields (gasUsed, effectiveGasPrice) onto
+ * transaction rows that were indexed before receipts were fetched.
+ * Uses updateMany per hash so a missing row is a silent no-op rather
+ * than throwing (unlike update()), keeping the backfill job resilient.
+ */
+export async function updateTransactionReceipts(
+  receipts: { hash: string; gasUsed: bigint; effectiveGasPrice: string | null }[]
+) {
+  if (receipts.length === 0) return;
+  await Promise.all(
+    receipts.map((r) =>
+      prisma.transaction.updateMany({
+        where: { hash: r.hash },
+        data: { gasUsed: r.gasUsed, effectiveGasPrice: r.effectiveGasPrice },
+      })
+    )
+  );
 }

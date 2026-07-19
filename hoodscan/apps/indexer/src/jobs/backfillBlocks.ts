@@ -1,4 +1,4 @@
-import { rpcClient } from "../rpc/client";
+import { rpcClient, getBlockReceipts } from "../rpc/client";
 import { decodeBlock, decodeTransaction } from "../rpc/decoder";
 import { saveBlock } from "../services/blockService";
 import { saveTransactions } from "../services/transactionService";
@@ -13,7 +13,7 @@ async function indexBlockByNumber(blockNumber: bigint): Promise<void> {
 
   const raw = (await rpcClient.request({
     method: "eth_getBlockByNumber",
-    params: [hexNumber, true],
+    params: [hexNumber as `0x${string}`, true],
   })) as unknown as RawBlock;
 
   if (!raw) return;
@@ -22,7 +22,13 @@ async function indexBlockByNumber(blockNumber: bigint): Promise<void> {
   await saveBlock(block);
 
   const rawTxs = raw.transactions as RawTransaction[];
-  const decodedTxs = rawTxs.map(decodeTransaction);
+  const receipts = await getBlockReceipts(hexNumber);
+  const receiptByHash = new Map(
+    receipts.map((r) => [r.transactionHash.toLowerCase(), r])
+  );
+  const decodedTxs = rawTxs.map((tx) =>
+    decodeTransaction(tx, receiptByHash.get(tx.hash.toLowerCase()))
+  );
   await saveTransactions(decodedTxs);
 }
 
@@ -52,7 +58,7 @@ export async function backfillBlocks(options?: {
   // caller should decide a starting block explicitly.
   if (latestIndexed === null) {
     console.warn(
-      "[backfill] No indexed blocks and no fromBlock provided — skipping. " +
+      "[backfill] No indexed blocks and no fromBlock provided â€” skipping. " +
         "Pass options.fromBlock to backfill from a specific block."
     );
     return;
@@ -64,7 +70,7 @@ export async function backfillBlocks(options?: {
     return;
   }
 
-  console.log(`[backfill] Indexing blocks ${start} → ${chainHead}...`);
+  console.log(`[backfill] Indexing blocks ${start} â†’ ${chainHead}...`);
 
   let current = start;
   while (current <= chainHead) {

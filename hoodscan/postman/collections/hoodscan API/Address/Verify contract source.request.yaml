@@ -1,0 +1,31 @@
+$kind: http-request
+name: Submit contract source for verification
+method: POST
+url: '{{baseUrl}}/address/{{address}}/verify'
+order: 8000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "sourceCode": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.24;\ncontract Example {}",
+      "contractName": "Example",
+      "compilerVersion": "v0.8.24+commit.e11b9ed9",
+      "optimizationEnabled": false,
+      "optimizationRuns": 200
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });

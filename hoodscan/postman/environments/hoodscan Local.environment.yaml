@@ -1,0 +1,10 @@
+name: hoodscan Local
+values:
+  - key: baseUrl
+    value: 'http://localhost:4000'
+  - key: blockNumber
+    value: '11912460'
+  - key: txHash
+    value: '0xabbe267fed84639015129b824423efce2f770d549e2f679c73c4698092e8cf6a'
+  - key: address
+    value: '0xc341aa48fc52c35420cb5705042c1ae9a9db213f'

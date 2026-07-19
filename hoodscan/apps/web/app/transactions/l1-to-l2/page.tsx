@@ -41,6 +41,7 @@ export default async function AllL1ToL2Page({
             page={page}
             limit={data.limit}
             total={data.total}
+            noun="messages"
           />
         </>
       )}

@@ -134,7 +134,7 @@ export async function reconcileInitiatedL1Messages(limit = 50): Promise<number> 
 async function fetchAndPersistL2Ticket(ticketHash: string): Promise<string | null> {
   const raw = (await rpcClient.request({
     method: "eth_getTransactionByHash",
-    params: [ticketHash],
+    params: [ticketHash as `0x${string}`],
   })) as unknown as RawTransaction | null;
 
   if (!raw?.hash || !raw.blockNumber) return null;
@@ -148,7 +148,7 @@ async function fetchAndPersistL2Ticket(ticketHash: string): Promise<string | nul
   if (!blockExists) {
     const rawBlock = (await rpcClient.request({
       method: "eth_getBlockByNumber",
-      params: [raw.blockNumber, false],
+      params: [raw.blockNumber as `0x${string}`, false],
     })) as unknown as RawBlock | null;
 
     if (!rawBlock) return null;

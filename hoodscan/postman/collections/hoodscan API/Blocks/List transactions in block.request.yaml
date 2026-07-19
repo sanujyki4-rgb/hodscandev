@@ -1,0 +1,27 @@
+$kind: http-request
+name: List transactions in block
+method: GET
+url: '{{baseUrl}}/blocks/{{blockNumber}}/transactions'
+order: 4000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('response is an array', function () {
+        pm.expect(pm.response.json()).to.be.an('array');
+      });
+      pm.test('each tx has method label', function () {
+        var arr = pm.response.json();
+        arr.forEach(function (t) {
+          pm.expect(t.method, 'method').to.be.a('string');
+        });
+      });

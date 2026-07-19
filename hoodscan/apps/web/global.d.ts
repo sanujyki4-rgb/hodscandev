@@ -8,3 +8,16 @@
 // declaration (TS2882). This keeps the import valid regardless of
 // which TypeScript version an editor happens to be using.
 declare module "*.css";
+
+// Minimal EIP-1193 provider typing for MetaMask / injected wallets,
+// used by the Write Contract feature (window.ethereum).
+interface EthereumProvider {
+  request(args: { method: string; params?: unknown[] | object }): Promise<unknown>;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+  removeListener?(event: string, handler: (...args: unknown[]) => void): void;
+  isMetaMask?: boolean;
+}
+
+interface Window {
+  ethereum?: EthereumProvider;
+}

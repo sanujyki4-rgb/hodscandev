@@ -1,0 +1,30 @@
+$kind: http-request
+name: List blocks (paginated)
+method: GET
+url: '{{baseUrl}}/blocks?limit=20&offset=0'
+order: 2000
+queryParams:
+  - key: limit
+    value: '20'
+  - key: offset
+    value: '0'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('body has pagination envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.blocks).to.be.an('array');
+        pm.expect(json.total).to.be.a('number');
+        pm.expect(json.limit).to.be.a('number');
+        pm.expect(json.offset).to.be.a('number');
+      });

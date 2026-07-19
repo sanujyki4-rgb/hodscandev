@@ -13,6 +13,7 @@ interface NavLink {
 const LINKS: NavLink[] = [
   { href: "/blocks", label: "Blocks", description: "Browse all indexed blocks" },
   { href: "/transactions", label: "Transactions", description: "Browse all transactions" },
+  { href: "/tokens", label: "Tokens", description: "ERC-20 tokens by activity" },
   {
     href: "/transactions/l1-to-l2",
     label: "L1↔L2 Messages",

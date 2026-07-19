@@ -1,0 +1,23 @@
+$kind: http-request
+name: List tokens
+method: GET
+url: '{{baseUrl}}/tokens?limit=25&offset=0'
+order: 1000
+queryParams:
+  - key: limit
+    value: '25'
+  - key: offset
+    value: '0'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });

@@ -51,7 +51,7 @@ export default async function HomePage() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.08fr_1fr]">
         <div className="flex flex-col gap-3">
           <h2 className="flex items-center gap-1.5 text-sm font-medium uppercase tracking-wide text-muted">
             <BlockIcon size={24} className="text-lime" />

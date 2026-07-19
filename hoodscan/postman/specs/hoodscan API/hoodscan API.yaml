@@ -1,0 +1,1786 @@
+openapi: 3.0.3
+info:
+  title: hoodscan API
+  version: 1.0.0
+  description: >-
+    REST API for **hoodscan**, a block explorer for the Robinhood Chain
+    (chain ID 4663) — an Arbitrum-based Ethereum L2. It exposes indexed
+    blocks, transactions, L1→L2 retryable-ticket messages, and per-address
+    transaction history.
+
+
+    ## Response conventions
+
+    - **BigInt / large numeric fields** (block `number`, `gas`, `nonce`,
+      etc.) are serialized as JSON **strings** to preserve full precision.
+
+    - **`Decimal(38, 0)` fields** (`value`, `gasPrice`, `maxFeePerGas`,
+      `maxPriorityFeePerGas`, `effectiveGasPrice`) hold wei values and are
+      returned as **strings**.
+
+    - **Pagination envelope split**: list endpoints (`/blocks`,
+      `/transactions`, `/transactions/l1-to-l2`) return a **bare array**
+      when `offset` is *not* supplied, and a paginated **envelope**
+      (`{ ...items, total, limit, offset }`) when `offset` *is* supplied.
+      The `/address/{address}/transactions` endpoint always returns an
+      envelope.
+
+    - **Rate limiting**: all endpoints except `/health` are limited to
+      120 requests per minute per IP; exceeding it returns **429**.
+
+    - **`total`** is capped at `EXPLORER_LIST_CAP` (default 500000),
+      mirroring Etherscan/Arbiscan's "last 500k records" behaviour.
+servers:
+  - url: http://localhost:4000
+    description: Local
+tags:
+  - name: Health
+  - name: Blocks
+  - name: Transactions
+  - name: Address
+  - name: Tokens
+  - name: Stats
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: 'Simple liveness probe. Always returns `{ "status": "ok" }`.'
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+              example:
+                status: ok
+
+  /blocks:
+    get:
+      tags: [Blocks]
+      summary: List latest blocks
+      description: >-
+        Latest blocks, newest first. Always returns the paginated envelope
+        `{ blocks, total, limit, offset }` — the same shape whether or not
+        `offset` is supplied. Callers that only need the rows read `blocks`.
+      operationId: listLatestBlocks
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: A list of blocks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockListEnvelope'
+
+  /blocks/{number}:
+    get:
+      tags: [Blocks]
+      summary: Get block by number
+      description: A single block by its number, including all of its transactions.
+      operationId: getBlockByNumber
+      parameters:
+        - $ref: '#/components/parameters/BlockNumberPathParam'
+      responses:
+        '200':
+          description: The requested block with its transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlockWithTransactions'
+        '400':
+          description: Block number is not a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Block number must be a positive integer
+        '404':
+          description: Block not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Block not found
+
+  /blocks/{number}/transactions:
+    get:
+      tags: [Blocks]
+      summary: List transactions in a block
+      description: All transactions in a given block, in execution order (ascending `transactionIndex`).
+      operationId: listTransactionsByBlock
+      parameters:
+        - $ref: '#/components/parameters/BlockNumberPathParam'
+      responses:
+        '200':
+          description: Transactions in the block
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+        '400':
+          description: Block number is not a positive integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Block number must be a positive integer
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: List latest transactions
+      description: >-
+        Latest transactions across the whole chain, newest first. Each
+        transaction includes a partial parent `block` (`timestamp`,
+        `isFinalized`). Always returns the paginated envelope
+        `{ transactions, total, limit, offset }` — the same shape whether or
+        not `offset` is supplied. Callers that only need the rows read
+        `transactions`.
+      operationId: listLatestTransactions
+      parameters:
+        - $ref: '#/components/parameters/TxLimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: A list of transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListEnvelope'
+
+  /transactions/l1-to-l2:
+    get:
+      tags: [Transactions]
+      summary: List L1→L2 messages
+      description: >-
+        Real L1→L2 retryable-ticket messages (Bridge contract deposits on
+        Ethereum L1). Always returns the paginated envelope
+        `{ transactions, total, limit, offset }` — the same shape regardless
+        of `status` or `offset`. Filtering is controlled solely by the
+        optional `status` query param (independent of pagination): the
+        homepage panel requests `status=relayed`, while the full deposits
+        page omits it (or uses `status=all`) to include pending messages.
+      operationId: listL1ToL2Transactions
+      parameters:
+        - $ref: '#/components/parameters/TxLimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+        - name: status
+          in: query
+          required: false
+          description: >-
+            Filter messages by status. `relayed` = fully landed on L2 (what
+            the homepage panel shows), `initiated` = still pending on L1,
+            `all` = both. Filtering is independent of pagination.
+          schema:
+            type: string
+            enum: [relayed, initiated, all]
+            default: all
+      responses:
+        '200':
+          description: A list of L1→L2 messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/L1ToL2ListEnvelope'
+
+  /transactions/{hash}:
+    get:
+      tags: [Transactions]
+      summary: Get transaction by hash
+      description: >-
+        A single transaction by hash. Adds a human-readable `txTypeLabel`
+        derived from `txType`, the parent `block`'s finalized status, and
+        flattens `l1ToL2Message.originTxHash` into a top-level `l1TxHash`
+        field (null when the tx has no associated L1→L2 message).
+      operationId: getTransactionByHash
+      parameters:
+        - $ref: '#/components/parameters/TxHashPathParam'
+      responses:
+        '200':
+          description: The requested transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetail'
+        '400':
+          description: Transaction hash is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid transaction hash format
+        '404':
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Transaction not found
+
+  /address/{address}/transactions:
+    get:
+      tags: [Address]
+      summary: List transactions by address
+      description: >-
+        Transactions where the address appears as sender (`fromAddress`) OR
+        receiver (`toAddress`), newest first. The address is lowercased
+        server-side. Always returns an envelope with `address`, `total`
+        (capped at 500000), `limit`, `offset`, and `transactions`.
+      operationId: listTransactionsByAddress
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Transactions for the address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressTransactionsEnvelope'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /address/{address}/token-transfers:
+    get:
+      tags: [Address]
+      summary: List ERC-20 token transfers by address
+      description: >-
+        ERC-20 Transfer events where the address is the sender OR receiver,
+        newest first. Each row's `amount` is scaled by the token's on-chain
+        `decimals` and tagged `direction` IN/OUT relative to the queried
+        address. Always returns an envelope. The address is lowercased
+        server-side.
+      operationId: listTokenTransfersByAddress
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Token transfers for the address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressTokenTransfersEnvelope'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /address/{address}/nft-transfers:
+    get:
+      tags: [Address]
+      summary: List NFT transfers by address
+      description: >-
+        NFT transfer events (ERC-721 + ERC-1155) where the address is the
+        sender OR receiver, newest first. NFT amounts are NOT scaled by
+        decimals — `amount` is a token count (1 for ERC-721, the transferred
+        quantity for ERC-1155) and `tokenId` identifies the specific token.
+        Always returns an envelope. The address is lowercased server-side.
+      operationId: listNftTransfersByAddress
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: NFT transfers for the address
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddressNftTransfersEnvelope'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /address/{address}/contract:
+    get:
+      tags: [Address]
+      summary: Get contract bytecode for an address
+      description: >-
+        Returns the on-chain runtime bytecode for an address and its size.
+        EIP-7702 note: a delegated EOA's 23-byte `0xef0100‖address`
+        designator is treated as NOT a contract. The address is lowercased
+        server-side.
+      operationId: getAddressContract
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      responses:
+        '200':
+          description: Contract bytecode info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractInfo'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /address/{address}/read-contract:
+    get:
+      tags: [Address]
+      summary: List readable contract functions
+      description: >-
+        Prefers a contract's verified ABI when available (following a proxy
+        to its implementation ABI). Falls back to the standard ERC fragments
+        (ERC-20/721/1155) when the contract isn't verified but its token
+        standard is detectable. Zero-argument reads are eagerly resolved
+        against the RPC node (best-effort). Returns `supported: false` when
+        no read ABI is available.
+      operationId: getReadContract
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      responses:
+        '200':
+          description: Detected read functions (with eager zero-arg values)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadContractResult'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+    post:
+      tags: [Address]
+      summary: Execute a single read function
+      description: >-
+        Executes a single read function with user-supplied arguments against
+        the RPC node, using the verified (proxy-resolved) ABI when available,
+        otherwise the standard fragment. A revert / bad argument returns 200
+        with an `{ error }` so the UI can show it inline. Validation failures
+        (missing/unknown function, wrong argument count) return 400.
+      operationId: callReadContract
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadContractCallRequest'
+      responses:
+        '200':
+          description: The read result, or an inline execution error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadContractCallResponse'
+        '400':
+          description: >-
+            Address is malformed, functionName missing, no read ABI
+            available, unknown function, or wrong argument count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: functionName is required
+
+  /address/{address}/verification:
+    get:
+      tags: [Address]
+      summary: Get source-code verification status
+      description: >-
+        Reports whether a contract's source is verified (via the DB or the
+        chain's Blockscout explorer). For proxies it also returns the
+        resolved implementation (address, name, source, ABI). Returns
+        `{ address, verified: false }` when not verified.
+      operationId: getVerification
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      responses:
+        '200':
+          description: Verification status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationStatus'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /address/{address}/verify:
+    post:
+      tags: [Address]
+      summary: Submit contract source for verification
+      description: >-
+        Compiles the submitted source with the exact solc version and
+        compares the result against the on-chain runtime bytecode. On a match
+        it stores the verified source + ABI and returns `verified: true`.
+        Compiler errors and bytecode mismatches come back as 200 with
+        `{ verified: false, error }`. Missing required fields or a malformed
+        address return 400.
+      operationId: postVerify
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: >-
+            Verification result. `verified: true` with the stored record on
+            success, or `verified: false` with an `error` on compiler
+            error / bytecode mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationStatus'
+        '400':
+          description: Address is malformed or required fields are missing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: sourceCode, contractName, and compilerVersion are required
+
+  /tokens:
+    get:
+      tags: [Tokens]
+      summary: List tokens
+      description: >-
+        Lists ERC-20 tokens the indexer has seen Transfer events for, ranked
+        by transfer count (most active first). Metadata is cache-only here so
+        the list stays fast. Always returns an envelope with `total` (capped
+        at 500000), `limit`, `offset`, and `tokens`.
+      operationId: listTokens
+      parameters:
+        - $ref: '#/components/parameters/TokenLimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: A list of tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenListEnvelope'
+
+  /tokens/{address}:
+    get:
+      tags: [Tokens]
+      summary: Get token detail
+      description: >-
+        Token overview: metadata (live on-chain), transfer count, holder
+        count (derived from net transfer balances), and total supply (raw
+        and formatted). The address is lowercased server-side.
+      operationId: getTokenDetail
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+      responses:
+        '200':
+          description: Token detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenDetail'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /tokens/{address}/transfers:
+    get:
+      tags: [Tokens]
+      summary: List transfers for a token
+      description: >-
+        All ERC-20 Transfer events for a single token, newest first. Amounts
+        are scaled by the token's `decimals`. Always returns an envelope with
+        the token metadata, `total` (capped at 500000), `limit`, `offset`,
+        and `transfers`.
+      operationId: listTokenTransfers
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/TokenLimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Transfers for the token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenTransfersEnvelope'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /tokens/{address}/holders:
+    get:
+      tags: [Tokens]
+      summary: List token holders
+      description: >-
+        Current holders, derived from net transfer balances (sum of incoming
+        minus outgoing amounts per address, over all indexed transfers of
+        this token). Ranked by balance; the zero address is excluded. Each
+        holder includes a `percentage` share of total supply when supply is
+        known. Always returns an envelope.
+      operationId: listTokenHolders
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/TokenLimitParam'
+        - $ref: '#/components/parameters/OffsetParam'
+      responses:
+        '200':
+          description: Holders for the token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenHoldersEnvelope'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /tokens/{address}/daily:
+    get:
+      tags: [Tokens]
+      summary: Get per-day token analytics
+      description: >-
+        Per-day analytics for a single ERC-20 token (transfer count + unique
+        senders/receivers per day) plus range roll-ups. `days` is one of
+        7, 14, 30, 90 (default 30); any other value falls back to 30.
+      operationId: getTokenDaily
+      parameters:
+        - $ref: '#/components/parameters/AddressPathParam'
+        - $ref: '#/components/parameters/DaysParam'
+      responses:
+        '200':
+          description: Daily token analytics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenDaily'
+        '400':
+          description: Address is malformed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error: Invalid address format
+
+  /stats/daily:
+    get:
+      tags: [Stats]
+      summary: Get per-day chain stats
+      description: >-
+        Per-day aggregation over the Block table (blocks, transactions,
+        average tx/block, gas utilization %, average base fee in Gwei,
+        average block size) plus range roll-ups. Points are ordered oldest
+        -> newest. `days` is one of 7, 14, 30, 90 (default 30).
+      operationId: getDailyStats
+      parameters:
+        - $ref: '#/components/parameters/DaysParam'
+      responses:
+        '200':
+          description: Daily chain stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyStats'
+
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      description: Max number of items to return. Clamped to a per-endpoint maximum.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 20
+      example: 20
+    TxLimitParam:
+      name: limit
+      in: query
+      description: Max number of items to return (transactions default 15, max 50).
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 15
+      example: 15
+    TokenLimitParam:
+      name: limit
+      in: query
+      description: Max number of items to return (tokens default 25, max 100).
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 25
+      example: 25
+    DaysParam:
+      name: days
+      in: query
+      description: >-
+        Look-back window in days. Must be one of 7, 14, 30, 90; any other
+        value falls back to the default of 30.
+      required: false
+      schema:
+        type: integer
+        enum: [7, 14, 30, 90]
+        default: 30
+      example: 30
+    OffsetParam:
+      name: offset
+      in: query
+      description: >-
+        Number of items to skip for pagination. The response shape (a
+        paginated envelope) is the same regardless of whether `offset` is
+        supplied.
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      example: 0
+    BlockNumberPathParam:
+      name: number
+      in: path
+      required: true
+      description: Block number (a positive integer).
+      schema:
+        type: string
+        pattern: '^\d+$'
+      example: '1'
+    TxHashPathParam:
+      name: hash
+      in: path
+      required: true
+      description: Transaction hash (0x-prefixed 32-byte hex).
+      schema:
+        type: string
+        pattern: '^0x[0-9a-fA-F]{64}$'
+      example: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    AddressPathParam:
+      name: address
+      in: path
+      required: true
+      description: Account address (0x-prefixed 20-byte hex). Lowercased server-side.
+      schema:
+        type: string
+        pattern: '^0x[0-9a-fA-F]{40}$'
+      example: '0x0000000000000000000000000000000000000000'
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required: [status]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    Block:
+      type: object
+      description: An indexed L2 block. BigInt fields are serialized as strings.
+      properties:
+        number:
+          type: string
+          description: Block number (BigInt as string).
+          example: '1'
+        hash:
+          type: string
+          example: '0xabc123...'
+        parentHash:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        gasUsed:
+          type: string
+          description: BigInt as string.
+        gasLimit:
+          type: string
+          description: BigInt as string.
+        baseFeePerGas:
+          type: string
+          description: BigInt as string.
+        l1BlockNumber:
+          type: string
+          description: BigInt as string.
+        sendCount:
+          type: string
+          description: BigInt as string.
+        sendRoot:
+          type: string
+        size:
+          type: integer
+        txCount:
+          type: integer
+        isFinalized:
+          type: boolean
+      required:
+        - number
+        - hash
+        - parentHash
+        - timestamp
+        - gasUsed
+        - gasLimit
+        - baseFeePerGas
+        - l1BlockNumber
+        - sendCount
+        - sendRoot
+        - size
+        - txCount
+        - isFinalized
+
+    BlockWithTransactions:
+      allOf:
+        - $ref: '#/components/schemas/Block'
+        - type: object
+          properties:
+            transactions:
+              type: array
+              items:
+                $ref: '#/components/schemas/Transaction'
+          required: [transactions]
+
+    Transaction:
+      type: object
+      description: >-
+        An indexed L2 transaction. BigInt fields (blockNumber, nonce, gas,
+        gasUsed) are strings; Decimal(38,0) wei fields (value, gasPrice,
+        maxFeePerGas, maxPriorityFeePerGas, effectiveGasPrice) are strings.
+      properties:
+        hash:
+          type: string
+          example: '0x0000000000000000000000000000000000000000000000000000000000000000'
+        blockNumber:
+          type: string
+          description: BigInt as string.
+        transactionIndex:
+          type: integer
+        fromAddress:
+          type: string
+        toAddress:
+          type: string
+          nullable: true
+          description: Null for contract-deployment transactions.
+        nonce:
+          type: string
+          description: BigInt as string.
+        value:
+          type: string
+          description: Wei value, Decimal(38,0) as string.
+          example: '0'
+        gas:
+          type: string
+          description: BigInt as string.
+        gasPrice:
+          type: string
+          nullable: true
+          description: Wei, Decimal(38,0) as string.
+        maxFeePerGas:
+          type: string
+          nullable: true
+          description: Wei, Decimal(38,0) as string.
+        maxPriorityFeePerGas:
+          type: string
+          nullable: true
+          description: Wei, Decimal(38,0) as string.
+        input:
+          type: string
+          description: Raw calldata.
+        functionSelector:
+          type: string
+          nullable: true
+          description: First 4 bytes of input, e.g. '0x095ea7b3'.
+        method:
+          type: string
+          description: Human-readable method label derived from functionSelector (e.g. Transfer, Approve, Swap, Deposit), mirroring Etherscan/Arbiscan.
+        txType:
+          $ref: '#/components/schemas/TxType'
+        requestId:
+          type: string
+          nullable: true
+          description: Retryable-ticket id, only set for txType '0x69'.
+        gasUsed:
+          type: string
+          nullable: true
+          description: Actual gas consumed (receipt-derived), BigInt as string. Null until backfilled.
+        effectiveGasPrice:
+          type: string
+          nullable: true
+          description: Actual wei/gas paid (receipt-derived), Decimal(38,0) as string. Null until backfilled.
+      required:
+        - hash
+        - blockNumber
+        - transactionIndex
+        - fromAddress
+        - nonce
+        - value
+        - gas
+        - input
+        - txType
+
+    TxType:
+      type: string
+      description: >-
+        Transaction type. Known values: '0x0' (Legacy), '0x2' (EIP-1559),
+        '0x69' (ArbitrumSubmitRetryableTx = real L1→L2 message), '0x6a'
+        (ArbitrumInternalTx = ArbOS per-block housekeeping, not an L1→L2
+        message). Other hex values may appear.
+      example: '0x2'
+
+    PartialBlock:
+      type: object
+      description: Partial parent-block info attached to transaction list rows.
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        isFinalized:
+          type: boolean
+      required: [timestamp, isFinalized]
+
+    TransactionWithBlock:
+      allOf:
+        - $ref: '#/components/schemas/Transaction'
+        - type: object
+          properties:
+            block:
+              $ref: '#/components/schemas/PartialBlock'
+
+    TransactionDetail:
+      allOf:
+        - $ref: '#/components/schemas/Transaction'
+        - type: object
+          properties:
+            block:
+              type: object
+              properties:
+                number:
+                  type: string
+                  description: BigInt as string.
+                timestamp:
+                  type: string
+                  format: date-time
+                isFinalized:
+                  type: boolean
+            l1TxHash:
+              type: string
+              nullable: true
+              description: >-
+                Flattened from the associated L1ToL2Message.originTxHash
+                (the real L1/Ethereum tx hash). Null when there is no
+                associated L1→L2 message.
+            txTypeLabel:
+              type: string
+              description: >-
+                Human-readable label for txType, e.g. 'Legacy', 'EIP-1559',
+                'L1↔L2 Message', 'System'. 'Unknown' if unrecognized.
+              example: EIP-1559
+          required: [txTypeLabel]
+
+    L1ToL2MessageRow:
+      type: object
+      description: >-
+        An L1→L2 retryable-ticket message row, as shaped by the controller.
+      properties:
+        id:
+          type: string
+          description: messageIndex from the L1 Bridge MessageDelivered event (BigInt as string).
+        originBlockNumber:
+          type: string
+          description: L1 origin block number (BigInt as string).
+        originTxHash:
+          type: string
+          description: The real L1 (Ethereum) transaction hash.
+        originAddress:
+          type: string
+          description: L1 sender (msg.sender on the Bridge/Inbox call).
+        originTimestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [initiated, relayed]
+          description: "'initiated' = seen on L1 (pending), 'relayed' = matched to its L2 tx."
+        l2TxHash:
+          type: string
+          nullable: true
+          description: The matching L2 transaction hash (null while pending).
+        l2Block:
+          type: object
+          nullable: true
+          description: Present once the message has landed on L2.
+          properties:
+            number:
+              type: string
+              description: L2 block number (BigInt as string).
+            timestamp:
+              type: string
+              format: date-time
+              nullable: true
+            isFinalized:
+              type: boolean
+      required:
+        - id
+        - originBlockNumber
+        - originTxHash
+        - originAddress
+        - originTimestamp
+        - status
+        - l2TxHash
+        - l2Block
+
+    BlockListEnvelope:
+      type: object
+      properties:
+        blocks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Block'
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [blocks, total, limit, offset]
+
+    TransactionListEnvelope:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionWithBlock'
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [transactions, total, limit, offset]
+
+    L1ToL2ListEnvelope:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/L1ToL2MessageRow'
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [transactions, total, limit, offset]
+
+    AddressTransactionsEnvelope:
+      type: object
+      properties:
+        address:
+          type: string
+          description: The queried address, lowercased.
+        total:
+          type: integer
+          description: Total matching transactions, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionWithBlock'
+      required: [address, total, limit, offset, transactions]
+
+    TokenTransfer:
+      type: object
+      description: >-
+        An ERC-20 Transfer event row for a single token. `rawAmount` is the
+        raw uint256 base-unit value (as a string); `amount` is scaled by the
+        token's `decimals` (null when decimals is unknown).
+      properties:
+        txHash:
+          type: string
+        logIndex:
+          type: integer
+        blockNumber:
+          type: string
+          description: BigInt as string.
+        timestamp:
+          type: string
+          format: date-time
+        fromAddress:
+          type: string
+        toAddress:
+          type: string
+        rawAmount:
+          type: string
+          description: Raw uint256 base-unit amount, as a string.
+        amount:
+          type: string
+          nullable: true
+          description: Amount scaled by decimals with thousands separators; null when decimals unknown.
+        fromLabel:
+          type: string
+          nullable: true
+        toLabel:
+          type: string
+          nullable: true
+        fromIsContract:
+          type: boolean
+          nullable: true
+        toIsContract:
+          type: boolean
+          nullable: true
+      required:
+        - txHash
+        - logIndex
+        - blockNumber
+        - timestamp
+        - fromAddress
+        - toAddress
+        - rawAmount
+
+    AddressTokenTransfer:
+      allOf:
+        - $ref: '#/components/schemas/TokenTransfer'
+        - type: object
+          description: A token transfer row as returned by the by-address endpoint.
+          properties:
+            tokenAddress:
+              type: string
+              description: The ERC-20 contract that emitted the event.
+            symbol:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            decimals:
+              type: integer
+              nullable: true
+            direction:
+              type: string
+              nullable: true
+              enum: [in, out]
+              description: IN/OUT relative to the queried address; null if neither party matches.
+            tokenIsContract:
+              type: boolean
+              description: Always true (the token address is a contract).
+          required: [tokenAddress]
+
+    AddressTokenTransfersEnvelope:
+      type: object
+      properties:
+        address:
+          type: string
+          description: The queried address, lowercased.
+        label:
+          type: string
+          nullable: true
+          description: Friendly label for the address, or null.
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddressTokenTransfer'
+      required: [address, label, total, limit, offset, transfers]
+
+    NftTransfer:
+      type: object
+      description: >-
+        An NFT transfer event row (ERC-721 or ERC-1155). Amounts are NOT
+        scaled by decimals; `amount` is a token count and `tokenId`
+        identifies the specific token (both uint256 as decimal strings).
+      properties:
+        txHash:
+          type: string
+        logIndex:
+          type: integer
+        batchIndex:
+          type: integer
+          description: Index within an ERC-1155 TransferBatch (0 otherwise).
+        blockNumber:
+          type: string
+          description: BigInt as string.
+        timestamp:
+          type: string
+          format: date-time
+        tokenAddress:
+          type: string
+          description: The NFT contract that emitted the event.
+        fromAddress:
+          type: string
+        toAddress:
+          type: string
+        tokenId:
+          type: string
+          description: uint256 token id, as a decimal string.
+        amount:
+          type: string
+          description: "'1' for ERC-721; the transferred quantity for ERC-1155."
+        standard:
+          type: string
+          enum: [erc721, erc1155]
+        tokenName:
+          type: string
+          nullable: true
+        tokenSymbol:
+          type: string
+          nullable: true
+        direction:
+          type: string
+          nullable: true
+          enum: [in, out]
+          description: IN/OUT relative to the queried address; null if neither party matches.
+        fromLabel:
+          type: string
+          nullable: true
+        toLabel:
+          type: string
+          nullable: true
+        fromIsContract:
+          type: boolean
+          nullable: true
+        toIsContract:
+          type: boolean
+          nullable: true
+        tokenIsContract:
+          type: boolean
+          description: Always true (the token address is a contract).
+      required:
+        - txHash
+        - logIndex
+        - batchIndex
+        - blockNumber
+        - timestamp
+        - tokenAddress
+        - fromAddress
+        - toAddress
+        - tokenId
+        - amount
+        - standard
+
+    AddressNftTransfersEnvelope:
+      type: object
+      properties:
+        address:
+          type: string
+          description: The queried address, lowercased.
+        label:
+          type: string
+          nullable: true
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/NftTransfer'
+      required: [address, label, total, limit, offset, transfers]
+
+    TokenListItem:
+      type: object
+      description: A token summary row in the token list, ranked by transfer count.
+      properties:
+        tokenAddress:
+          type: string
+        name:
+          type: string
+          nullable: true
+        symbol:
+          type: string
+          nullable: true
+        decimals:
+          type: integer
+          nullable: true
+        transferCount:
+          type: integer
+          description: Number of indexed Transfer events for this token.
+      required: [tokenAddress, name, symbol, decimals, transferCount]
+
+    TokenListEnvelope:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Distinct token count, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        tokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenListItem'
+      required: [total, limit, offset, tokens]
+
+    TokenDetail:
+      type: object
+      description: >-
+        Token overview with live metadata, transfer count, holder count and
+        total supply (raw uint256 string and formatted).
+      properties:
+        tokenAddress:
+          type: string
+        name:
+          type: string
+          nullable: true
+        symbol:
+          type: string
+          nullable: true
+        decimals:
+          type: integer
+          nullable: true
+        isContract:
+          type: boolean
+        transferCount:
+          type: integer
+        holderCount:
+          type: integer
+          description: Number of addresses with a positive net balance.
+        rawTotalSupply:
+          type: string
+          nullable: true
+          description: On-chain totalSupply() as a raw uint256 string, or null if unreadable.
+        totalSupply:
+          type: string
+          nullable: true
+          description: totalSupply formatted by decimals; null when decimals/supply unknown.
+      required:
+        - tokenAddress
+        - name
+        - symbol
+        - decimals
+        - isContract
+        - transferCount
+        - holderCount
+        - rawTotalSupply
+        - totalSupply
+
+    TokenTransfersEnvelope:
+      type: object
+      description: Transfers for a single token, with the token's metadata attached.
+      properties:
+        tokenAddress:
+          type: string
+        name:
+          type: string
+          nullable: true
+        symbol:
+          type: string
+          nullable: true
+        decimals:
+          type: integer
+          nullable: true
+        total:
+          type: integer
+          description: Total matching rows, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenTransfer'
+      required:
+        - tokenAddress
+        - name
+        - symbol
+        - decimals
+        - total
+        - limit
+        - offset
+        - transfers
+
+    TokenHolder:
+      type: object
+      description: A single token holder, derived from net transfer balances.
+      properties:
+        rank:
+          type: integer
+          description: 1-based rank by balance (offset-aware).
+        address:
+          type: string
+        label:
+          type: string
+          nullable: true
+        rawBalance:
+          type: string
+          description: Net balance as a raw uint256 string.
+        balance:
+          type: string
+          nullable: true
+          description: Balance formatted by decimals; null when decimals unknown.
+        percentage:
+          type: number
+          nullable: true
+          description: Share of total supply in percent; null when supply is unknown/zero.
+        isContract:
+          type: boolean
+          nullable: true
+      required: [rank, address, label, rawBalance, balance, percentage]
+
+    TokenHoldersEnvelope:
+      type: object
+      properties:
+        tokenAddress:
+          type: string
+        name:
+          type: string
+          nullable: true
+        symbol:
+          type: string
+          nullable: true
+        decimals:
+          type: integer
+          nullable: true
+        totalSupply:
+          type: string
+          nullable: true
+          description: Raw uint256 total supply string, or null if unreadable.
+        total:
+          type: integer
+          description: Total holder count, capped at 500000.
+        limit:
+          type: integer
+        offset:
+          type: integer
+        holders:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenHolder'
+      required:
+        - tokenAddress
+        - name
+        - symbol
+        - decimals
+        - totalSupply
+        - total
+        - limit
+        - offset
+        - holders
+
+    TokenDailyPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          description: UTC calendar day, YYYY-MM-DD.
+          example: '2024-01-01'
+        transfers:
+          type: integer
+        senders:
+          type: integer
+          description: Distinct sender addresses that day.
+        receivers:
+          type: integer
+          description: Distinct receiver addresses that day.
+      required: [date, transfers, senders, receivers]
+
+    TokenDaily:
+      type: object
+      description: Per-day analytics for a single ERC-20 token, plus range roll-ups.
+      properties:
+        tokenAddress:
+          type: string
+        days:
+          type: integer
+          description: The effective look-back window used (7, 14, 30, or 90).
+        allowedDays:
+          type: array
+          items:
+            type: integer
+          description: The set of allowed day windows.
+          example: [7, 14, 30, 90]
+        summary:
+          type: object
+          properties:
+            totalTransfers:
+              type: integer
+            activeDays:
+              type: integer
+            avgTransfersPerDay:
+              type: integer
+            peakDay:
+              type: object
+              nullable: true
+              properties:
+                date:
+                  type: string
+                transfers:
+                  type: integer
+              required: [date, transfers]
+          required: [totalTransfers, activeDays, avgTransfersPerDay, peakDay]
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenDailyPoint'
+      required: [tokenAddress, days, allowedDays, summary, points]
+
+    DailyStatsPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          description: UTC calendar day, YYYY-MM-DD.
+          example: '2024-01-01'
+        blocks:
+          type: integer
+        transactions:
+          type: integer
+        avgTxPerBlock:
+          type: number
+          description: Average transactions per block (2 decimals).
+        gasUtilPct:
+          type: number
+          description: Average gas utilization as a percentage (2 decimals).
+        avgBaseFeeGwei:
+          type: number
+          description: Average base fee in Gwei (4 decimals).
+        avgBlockSizeBytes:
+          type: integer
+          description: Average block size in bytes (rounded).
+      required:
+        - date
+        - blocks
+        - transactions
+        - avgTxPerBlock
+        - gasUtilPct
+        - avgBaseFeeGwei
+        - avgBlockSizeBytes
+
+    DailyStats:
+      type: object
+      description: Per-day chain aggregation over the Block table, plus range roll-ups.
+      properties:
+        days:
+          type: integer
+          description: The effective look-back window used (7, 14, 30, or 90).
+        allowedDays:
+          type: array
+          items:
+            type: integer
+          example: [7, 14, 30, 90]
+        summary:
+          type: object
+          properties:
+            totalTransactions:
+              type: integer
+            totalBlocks:
+              type: integer
+            activeDays:
+              type: integer
+            avgTxPerDay:
+              type: integer
+            peakTxDay:
+              type: object
+              nullable: true
+              properties:
+                date:
+                  type: string
+                transactions:
+                  type: integer
+              required: [date, transactions]
+          required: [totalTransactions, totalBlocks, activeDays, avgTxPerDay, peakTxDay]
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyStatsPoint'
+      required: [days, allowedDays, summary, points]
+
+    ContractInfo:
+      type: object
+      description: On-chain runtime bytecode info for an address.
+      properties:
+        address:
+          type: string
+          description: The queried address, lowercased.
+        isContract:
+          type: boolean
+          description: >-
+            False for EOAs and EIP-7702 delegated EOAs (0xef0100 designator).
+        bytecode:
+          type: string
+          description: Raw runtime bytecode, 0x-prefixed hex.
+        sizeBytes:
+          type: integer
+          description: Bytecode size in bytes (0 when not a contract).
+      required: [address, isContract, bytecode, sizeBytes]
+
+    ReadContractFunction:
+      type: object
+      description: A single readable contract function, with an eager zero-arg value.
+      properties:
+        name:
+          type: string
+        stateMutability:
+          type: string
+          example: view
+        inputs:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+                description: Solidity ABI type, e.g. 'address', 'uint256'.
+            required: [name, type]
+        outputs:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+            required: [type]
+        hasInputs:
+          type: boolean
+        value:
+          type: string
+          nullable: true
+          description: >-
+            Eagerly-resolved value for zero-argument reads (display string);
+            null when the function has inputs or the read failed.
+      required: [name, stateMutability, inputs, outputs, hasInputs, value]
+
+    ReadContractResult:
+      type: object
+      description: >-
+        The detected read functions for a contract, from its verified ABI
+        (proxy-resolved) or a standard token ABI fallback.
+      properties:
+        address:
+          type: string
+        standard:
+          type: string
+          nullable: true
+          description: >-
+            'verified' for a verified ABI, one of 'erc20'/'erc721'/'erc1155'
+            for a standard fallback, or null when unsupported.
+        source:
+          type: string
+          enum: [verified, standard]
+          description: Whether functions came from the verified ABI or a standard ABI.
+        supported:
+          type: boolean
+          description: False when no read ABI is available for the contract.
+        isProxy:
+          type: boolean
+          description: Present on the verified path; true when the contract is a proxy.
+        functions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadContractFunction'
+      required: [address, standard, source, supported, functions]
+
+    ReadContractCallRequest:
+      type: object
+      description: Arguments for executing a single read function.
+      properties:
+        functionName:
+          type: string
+          description: The read function to call (must exist in the resolved ABI).
+        args:
+          type: array
+          items:
+            type: string
+          description: >-
+            String-encoded arguments, coerced to the ABI input types. Must
+            match the function's input arity.
+      required: [functionName]
+
+    ReadContractCallResponse:
+      type: object
+      description: >-
+        The result of a single read call. Exactly one of `result` or `error`
+        is present. An inline `error` (revert / bad argument) still returns
+        HTTP 200.
+      properties:
+        result:
+          type: string
+          description: The decoded read result as a display string.
+        error:
+          type: string
+          description: Inline execution error (e.g. revert reason).
+
+    VerifyRequest:
+      type: object
+      description: Contract source-verification submission.
+      properties:
+        sourceCode:
+          type: string
+          description: Full (flattened) Solidity source.
+        contractName:
+          type: string
+        compilerVersion:
+          type: string
+          description: Exact solc version, e.g. 'v0.8.24+commit.e11b9ed9'.
+        optimizationEnabled:
+          type: boolean
+          default: false
+        optimizationRuns:
+          type: integer
+          default: 200
+        evmVersion:
+          type: string
+          nullable: true
+        constructorArguments:
+          type: string
+          nullable: true
+          description: ABI-encoded constructor arguments as hex (optional).
+      required: [sourceCode, contractName, compilerVersion]
+
+    VerifiedImplementation:
+      type: object
+      description: Resolved implementation record for a verified proxy.
+      properties:
+        address:
+          type: string
+        contractName:
+          type: string
+        compilerVersion:
+          type: string
+        sourceCode:
+          type: string
+        abi:
+          description: The implementation ABI (array of ABI entries).
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required: [address, contractName, compilerVersion, sourceCode, abi]
+
+    VerificationStatus:
+      type: object
+      description: >-
+        Source-code verification status. `verified: false` may appear alone,
+        or with an `error` (compiler error / bytecode mismatch). When
+        `verified: true`, the full verified record is returned.
+      properties:
+        address:
+          type: string
+        verified:
+          type: boolean
+        error:
+          type: string
+          description: Present on failed verification submissions (verified is false).
+        contractName:
+          type: string
+        compilerVersion:
+          type: string
+        optimizationEnabled:
+          type: boolean
+        optimizationRuns:
+          type: integer
+        evmVersion:
+          type: string
+          nullable: true
+        sourceCode:
+          type: string
+        abi:
+          description: >-
+            The verified ABI. A JSON string on the GET path (stored value),
+            or an ABI array on the POST success path.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+                additionalProperties: true
+        constructorArguments:
+          type: string
+          nullable: true
+        proxyType:
+          type: string
+          nullable: true
+          description: e.g. 'eip1967' / 'transparent'; null when not a proxy.
+        verifiedAt:
+          type: string
+          format: date-time
+        implementation:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/VerifiedImplementation'
+      required: [address, verified]

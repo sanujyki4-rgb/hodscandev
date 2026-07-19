@@ -1,4 +1,4 @@
-import type { RawBlock, DecodedBlock, RawTransaction, DecodedTransaction } from "@hoodscan/types";
+import type { RawBlock, DecodedBlock, RawTransaction, DecodedTransaction, RawReceipt } from "@hoodscan/types";
 
 /**
  * Convert a hex string ("0x66d56b") to a bigint.
@@ -65,7 +65,10 @@ export function decodeBlock(raw: RawBlock): DecodedBlock {
  * fetched with the "full transactions" flag) into the shape
  * persisted to the database.
  */
-export function decodeTransaction(raw: RawTransaction): DecodedTransaction {
+export function decodeTransaction(
+  raw: RawTransaction,
+  receipt?: RawReceipt
+): DecodedTransaction {
   return {
     hash: raw.hash,
     blockNumber: hexToBigInt(raw.blockNumber),
@@ -84,5 +87,12 @@ export function decodeTransaction(raw: RawTransaction): DecodedTransaction {
     functionSelector: extractFunctionSelector(raw.input),
     txType: raw.type,
     requestId: raw.requestId ?? null,
+    // Receipt-derived actual-fee fields. gasUsed is stored even when 0
+    // so a backfilled row is never left null; effectiveGasPrice stays
+    // null if the receipt didn't include it.
+    gasUsed: receipt?.gasUsed != null ? hexToBigInt(receipt.gasUsed) : null,
+    effectiveGasPrice: receipt?.effectiveGasPrice
+      ? hexToBigInt(receipt.effectiveGasPrice).toString()
+      : null,
   };
 }

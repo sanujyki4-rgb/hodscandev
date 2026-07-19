@@ -10,6 +10,7 @@ const MOBILE_NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/blocks", label: "Blocks" },
   { href: "/transactions", label: "Transactions" },
+  { href: "/tokens", label: "Tokens" },
   { href: "/transactions/l1-to-l2", label: "L1↔L2 Messages" },
   { href: "/stats", label: "Stats" },
 ];

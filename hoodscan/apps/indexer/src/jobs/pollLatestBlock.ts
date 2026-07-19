@@ -1,7 +1,9 @@
-import { rpcClient } from "../rpc/client";
+import { rpcClient, getBlockReceipts } from "../rpc/client";
 import { decodeBlock, decodeTransaction } from "../rpc/decoder";
 import { saveBlock } from "../services/blockService";
 import { saveTransactions } from "../services/transactionService";
+import { extractTokenTransfers, saveTokenTransfers } from "../services/tokenTransferService";
+import { extractNftTransfers, saveNftTransfers } from "../services/nftTransferService";
 import type { RawBlock, RawTransaction } from "@hoodscan/types";
 
 /**
@@ -23,8 +25,21 @@ export async function pollLatestBlock(): Promise<bigint | null> {
   await saveBlock(block);
 
   const rawTxs = raw.transactions as RawTransaction[];
-  const decodedTxs = rawTxs.map(decodeTransaction);
+  // One eth_getBlockReceipts call per block gives gasUsed +
+  // effectiveGasPrice for every tx, so we can store the actual fee.
+  const receipts = await getBlockReceipts(raw.number);
+  const receiptByHash = new Map(
+    receipts.map((r) => [r.transactionHash.toLowerCase(), r])
+  );
+  const decodedTxs = rawTxs.map((tx) =>
+    decodeTransaction(tx, receiptByHash.get(tx.hash.toLowerCase()))
+  );
   await saveTransactions(decodedTxs);
+
+  // Layer 3: decode ERC-20 Transfer events from the same receipts
+  // and persist them for the address token-transfers tab.
+  const tokenTransfers = extractTokenTransfers(receipts, block.number, block.timestamp);
+  await saveTokenTransfers(tokenTransfers);
 
   return block.number;
 }

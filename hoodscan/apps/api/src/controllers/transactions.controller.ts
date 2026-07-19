@@ -1,28 +1,26 @@
 import type { Request, Response } from "express";
 import { prisma } from "@hoodscan/database";
 import { TX_TYPE_LABELS } from "@hoodscan/types";
+import { resolveMethod, attachMethod } from "../utils/methodResolver";
+import { withAddressLabels } from "../utils/addressLabel";
+import { decodeInput } from "../utils/inputDecoder";
+import { resolveTokenTransfer } from "../utils/tokenTransfer";
+import { isContractAddress } from "../utils/isContract";
 import { serializeBigInt } from "../utils/serialize";
 import { parsePagination } from "../utils/pagination";
+import { cappedCount } from "../utils/count";
+
 
 /**
  * GET /transactions?limit=15&offset=0
  * Latest transactions across the whole chain (not scoped to one
- * block), newest first. Powers the homepage "Latest Transactions"
- * panel (no offset) and the "view all transactions" page (with offset).
+ * block), newest first. Always returns the paginated envelope
+ * { transactions, total, limit, offset } — the same shape whether or
+ * not an offset is passed. Callers that only need the rows (e.g. the
+ * homepage panel) read `.transactions`.
  */
 export async function listLatestTransactions(req: Request, res: Response) {
-  const { limit, offset, hasOffset } = parsePagination(req, 15, 50);
-
-  if (!hasOffset) {
-    const transactions = await prisma.transaction.findMany({
-      orderBy: [{ blockNumber: "desc" }, { transactionIndex: "desc" }],
-      take: limit,
-      include: {
-        block: { select: { timestamp: true, isFinalized: true } },
-      },
-    });
-    return res.json(serializeBigInt(transactions));
-  }
+  const { limit, offset } = parsePagination(req, 15, 50);
 
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
@@ -33,10 +31,10 @@ export async function listLatestTransactions(req: Request, res: Response) {
         block: { select: { timestamp: true, isFinalized: true } },
       },
     }),
-    prisma.transaction.count(),
+    cappedCount("Transaction"),
   ]);
 
-  res.json(serializeBigInt({ transactions, total, limit, offset }));
+  res.json(serializeBigInt({ transactions: (await Promise.all(transactions.map(attachMethod))).map(withAddressLabels), total, limit, offset }));
 }
 
 /**
@@ -51,14 +49,23 @@ export async function listLatestTransactions(req: Request, res: Response) {
  * silently hide every pending row, since a Transaction row for it
  * doesn't exist yet.
  *
- * Homepage panel (no offset): only "relayed" (complete) messages —
- * matches Arbiscan's own homepage, which reserves pending rows for
- * the dedicated /txsDeposits view.
- * Full "view all" page (with offset): everything, pending included.
+ * Filtering is explicit and decoupled from pagination: pass
+ * ?status=relayed (the homepage panel, matching Arbiscan's homepage
+ * which reserves pending rows for its dedicated /txsDeposits view) or
+ * ?status=initiated to narrow; omit it (or ?status=all) for the full
+ * "view all" deposits page, pending rows included.
+ *
+ * Always returns the paginated envelope { transactions, total, limit,
+ * offset } — the same shape regardless of status or offset.
  */
 export async function listL1ToL2Transactions(req: Request, res: Response) {
-  const { limit, offset, hasOffset } = parsePagination(req, 15, 50);
-  const where = hasOffset ? {} : { status: "relayed" };
+  const { limit, offset } = parsePagination(req, 15, 50);
+  const statusParam =
+    typeof req.query.status === "string" ? req.query.status : "all";
+  const where =
+    statusParam === "relayed" || statusParam === "initiated"
+      ? { status: statusParam }
+      : {};
   const include = {
     transaction: {
       select: {
@@ -98,16 +105,6 @@ export async function listL1ToL2Transactions(req: Request, res: Response) {
       : null,
   });
 
-  if (!hasOffset) {
-    const messages = await prisma.l1ToL2Message.findMany({
-      where,
-      orderBy: { originBlockNumber: "desc" },
-      take: limit,
-      include,
-    });
-    return res.json(serializeBigInt(messages.map(toRow)));
-  }
-
   const [messages, total] = await Promise.all([
     prisma.l1ToL2Message.findMany({
       where,
@@ -116,7 +113,7 @@ export async function listL1ToL2Transactions(req: Request, res: Response) {
       skip: offset,
       include,
     }),
-    prisma.l1ToL2Message.count({ where }),
+    cappedCount("L1ToL2Message"),
   ]);
 
   res.json(serializeBigInt({ transactions: messages.map(toRow), total, limit, offset }));
@@ -135,6 +132,10 @@ export async function listL1ToL2Transactions(req: Request, res: Response) {
 export async function getTransactionByHash(req: Request, res: Response) {
   const { hash } = req.params;
 
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    return res.status(400).json({ error: "Invalid transaction hash format" });
+  }
+
   const tx = await prisma.transaction.findUnique({
     where: { hash },
     include: {
@@ -150,12 +151,23 @@ export async function getTransactionByHash(req: Request, res: Response) {
   }
 
   const { l1ToL2Message, ...rest } = tx;
+  const withLabels = withAddressLabels(rest);
 
   res.json(
     serializeBigInt({
-      ...rest,
+      ...withLabels,
       l1TxHash: l1ToL2Message?.originTxHash ?? null,
       txTypeLabel: TX_TYPE_LABELS[tx.txType] ?? "Unknown",
+      fromIsContract: await isContractAddress(rest.fromAddress, true),
+      toIsContract: await isContractAddress(rest.toAddress, true),
+      method: await resolveMethod(tx.functionSelector, tx.txType, true, tx.toAddress),
+      decodedInput: await decodeInput(tx.input, tx.functionSelector),
+      tokenTransfer: await resolveTokenTransfer(
+        tx.input,
+        tx.functionSelector,
+        tx.toAddress,
+        true
+      ),
     })
   );
 }
@@ -176,5 +188,5 @@ export async function listTransactionsByBlock(req: Request, res: Response) {
     orderBy: { transactionIndex: "asc" },
   });
 
-  res.json(serializeBigInt(transactions));
+  res.json(serializeBigInt((await Promise.all(transactions.map(attachMethod))).map(withAddressLabels)));
 }

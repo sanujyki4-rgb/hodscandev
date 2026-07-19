@@ -1,0 +1,29 @@
+$kind: http-request
+name: Get transaction by hash
+method: GET
+url: '{{baseUrl}}/transactions/{{txHash}}'
+order: 4000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('tx has expected shape and BigInt-as-string', function () {
+        var json = pm.response.json();
+        pm.expect(json.hash).to.be.a('string');
+        pm.expect(json.txTypeLabel).to.be.a('string');
+        pm.expect(json.value).to.be.a('string');
+      });
+      pm.test('method label is present', function () {
+        var json = pm.response.json();
+        pm.expect(json.method, 'method').to.be.a('string');
+        pm.expect(json.method.length, 'method not empty').to.be.above(0);
+      });

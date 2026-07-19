@@ -1,0 +1,26 @@
+$kind: http-request
+name: Get block by number
+method: GET
+url: '{{baseUrl}}/blocks/{{blockNumber}}'
+order: 3000
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('block has expected shape', function () {
+        var json = pm.response.json();
+        pm.expect(json).to.have.property('number');
+        pm.expect(json.number).to.be.a('string');
+        pm.expect(json).to.have.property('hash');
+        pm.expect(json).to.have.property('parentHash');
+        pm.expect(json.transactions).to.be.an('array');
+      });

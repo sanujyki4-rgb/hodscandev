@@ -2,6 +2,11 @@ import type { Request, Response } from "express";
 import { prisma } from "@hoodscan/database";
 import { serializeBigInt } from "../utils/serialize";
 import { parsePagination } from "../utils/pagination";
+import { EXPLORER_LIST_CAP } from "@hoodscan/config";
+import { attachMethod } from "../utils/methodResolver";
+import { getAddressLabel } from "@hoodscan/types";
+import { resolveContractInfo } from "../utils/contractNames";
+import { isValidAddress } from "../utils/address";
 
 /**
  * GET /address/:address/transactions?limit=20&offset=0
@@ -9,6 +14,9 @@ import { parsePagination } from "../utils/pagination";
  * newest first.
  */
 export async function listTransactionsByAddress(req: Request, res: Response) {
+  if (!isValidAddress(req.params.address)) {
+    return res.status(400).json({ error: "Invalid address format" });
+  }
   const address = req.params.address.toLowerCase();
   const { limit, offset } = parsePagination(req, 20, 100);
 
@@ -29,13 +37,45 @@ export async function listTransactionsByAddress(req: Request, res: Response) {
     prisma.transaction.count({ where }),
   ]);
 
+  // Cheap existence check: does this address have ANY NFT (ERC-721/1155)
+  // activity? Drives the conditional "NFT Transfers" tab on the web.
+  const nftRow = await prisma.nftTransfer.findFirst({
+    where: { OR: [{ fromAddress: address }, { toAddress: address }] },
+    select: { id: true },
+  });
+  const hasNftActivity = !!nftRow;
+
+  // Contract flags + verified names for this address and every tx party
+  // (shared helper: dedups, resolves + caches names, Etherscan-style).
+  const { isContract: isContractByAddr, names: nameByAddr } = await resolveContractInfo([
+    address,
+    ...transactions
+      .flatMap((tx) => [tx.fromAddress, tx.toAddress])
+      .filter((a): a is string => !!a),
+  ]);
+
+  // Method labels via the same shared resolver list endpoints use
+  // (allowRemote=false, so this stays fast — curated map + cache only).
+  const withMethods = await Promise.all(transactions.map(attachMethod));
+
   res.json(
     serializeBigInt({
       address,
-      total,
+      label: getAddressLabel(address),
+      isContract: isContractByAddr.get(address) ?? null,
+      hasNftActivity,
+      total: Math.min(total, EXPLORER_LIST_CAP),
       limit,
       offset,
-      transactions,
+      transactions: withMethods.map((tx) => ({
+        ...tx,
+        fromLabel: getAddressLabel(tx.fromAddress) ?? nameByAddr.get(tx.fromAddress) ?? null,
+        toLabel: tx.toAddress
+          ? (getAddressLabel(tx.toAddress) ?? nameByAddr.get(tx.toAddress) ?? null)
+          : null,
+        fromIsContract: isContractByAddr.get(tx.fromAddress) ?? null,
+        toIsContract: tx.toAddress ? (isContractByAddr.get(tx.toAddress) ?? null) : null,
+      })),
     })
   );
 }

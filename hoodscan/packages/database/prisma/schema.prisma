@@ -57,6 +57,9 @@ model Transaction {
   l1ToL2Message         L1ToL2Message?
 
   @@index([blockNumber])
+  // Compound index matching the list ORDER BY (blockNumber desc,
+  // transactionIndex desc) so latest-tx pagination is a pure index scan.
+  @@index([blockNumber, transactionIndex])
   @@index([fromAddress])
   @@index([toAddress])
   @@index([functionSelector])
@@ -83,4 +86,87 @@ model L1ToL2Message {
   status             String   @default("initiated") // initiated | relayed
 
   @@index([originBlockNumber])
+}
+
+// One ERC-20 Transfer event (topic0 0xddf252ad...), decoded from a
+// transaction receipt's logs by the indexer. Stored separately from
+// Transaction because a single tx can emit many transfers, and the
+// address page lists transfers by participant (from/to), not by tx.
+// timestamp/tokenAddress are denormalized so the list endpoint needs
+// no extra joins. amount is the raw uint256 base-unit value; the API
+// scales it by the token's on-chain decimals (Layer 1 tokenResolver).
+model TokenTransfer {
+  id            BigInt   @id @default(autoincrement())
+  txHash        String   // parent transaction hash (Transaction.hash)
+  logIndex      Int      // log position within the receipt
+  blockNumber   BigInt
+  timestamp     DateTime // denormalized from the parent block
+  tokenAddress  String   // the ERC-20 contract that emitted the event
+  fromAddress   String   // Transfer `from` (indexed topic 1)
+  toAddress     String   // Transfer `to` (indexed topic 2)
+  amount        Decimal  @db.Decimal(78, 0) // raw uint256 value (base units)
+
+  // A given (tx, log) pair is unique — makes indexer upserts idempotent
+  // so re-processing a block never double-inserts.
+  @@unique([txHash, logIndex])
+  @@index([tokenAddress])
+  @@index([fromAddress])
+  @@index([toAddress])
+  @@index([blockNumber])
+}
+
+// One NFT transfer event decoded from a transaction receipt's logs by
+// the indexer. Covers ERC-721 Transfer (topic0 shared with ERC-20 but
+// 4 topics) and ERC-1155 TransferSingle/TransferBatch. Stored separately
+// from Transaction because one tx can emit many transfers, and the
+// address page lists them by participant (from/to). tokenId + amount are
+// kept as decimal strings to safely hold uint256 values.
+model NftTransfer {
+  id            BigInt   @id @default(autoincrement())
+  txHash        String   // parent transaction hash (Transaction.hash)
+  logIndex      Int      // log position within the receipt
+  batchIndex    Int      @default(0) // index within an ERC-1155 TransferBatch (0 otherwise)
+  blockNumber   BigInt
+  timestamp     DateTime // denormalized from the parent block
+  tokenAddress  String   // the NFT contract that emitted the event
+  fromAddress   String   // Transfer `from`
+  toAddress     String   // Transfer `to`
+  tokenId       String   // uint256 token id, as a decimal string
+  amount        String   @default("1") // "1" for ERC-721; the value for ERC-1155
+  standard      String   // "erc721" | "erc1155"
+
+  // (tx, log, batch) is unique — makes indexer upserts idempotent so
+  // re-processing a block never double-inserts.
+  @@unique([txHash, logIndex, batchIndex])
+  @@index([tokenAddress])
+  @@index([fromAddress])
+  @@index([toAddress])
+  @@index([blockNumber])
+}
+
+// Generic key/value cursor for resumable background jobs (e.g. the NFT
+// backfill stores the last block it scanned here). Lets jobs pick up
+// where they left off across indexer restarts instead of rescanning.
+model IndexerCursor {
+  name       String   @id
+  value      BigInt
+  updatedAt  DateTime @updatedAt
+}
+
+// A contract whose Solidity source has been verified against its
+// on-chain runtime bytecode (solc compile + metadata-stripped match).
+// Once verified we have the real ABI, powering full Read/Write Contract.
+model VerifiedContract {
+  address              String   @id  // lowercased 0x contract address
+  contractName         String
+  compilerVersion      String        // e.g. v0.8.24+commit.e11b9ed9
+  optimizationEnabled  Boolean  @default(false)
+  optimizationRuns     Int      @default(200)
+  evmVersion           String?
+  sourceCode           String        // full (flattened) Solidity source
+  abi                  String        // JSON string of the ABI array
+  constructorArguments String?       // hex, optional
+  proxyType            String?       // e.g. eip1967 / transparent (null = not a proxy)
+  implementationAddress String?      // lowercased impl address for proxies
+  verifiedAt           DateTime @default(now())
 }

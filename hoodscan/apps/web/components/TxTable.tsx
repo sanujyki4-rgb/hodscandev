@@ -1,7 +1,11 @@
 import Link from "next/link";
 import type { TransactionSummary } from "@/lib/api";
-import { shortenHash, weiToEth, methodLabel, approxTxnFeeEth, timeAgo } from "@/lib/format";
+import { shortenHash, weiToEth, methodLabel, resolvedTxnFee, TXN_FEE_TOOLTIP, timeAgo, displayAddress } from "@/lib/format";
+import { tableRowClass } from "@/lib/tableStyles";
 import { TxIcon } from "./icons";
+import { EmptyState } from "./EmptyState";
+import { ViewAllLink } from "./ViewAllLink";
+import { Chip } from "./Chip";
 
 // System txs are identified by txType "0x6a" (Arbitrum-style ArbOS
 // internal housekeeping) — same source of truth used by the backend
@@ -33,11 +37,7 @@ export function TxTable({
   viewAllHref?: string;
 }) {
   if (transactions.length === 0) {
-    return (
-      <p className="rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm text-muted">
-        No transactions to show.
-      </p>
-    );
+    return <EmptyState message="No transactions to show." />;
   }
 
   const isDetailed = variant === "detailed";
@@ -54,23 +54,22 @@ export function TxTable({
               {isDetailed && <th className="px-4 py-2.5 font-semibold">Age</th>}
               <th className="px-4 py-2.5 font-semibold">From</th>
               <th className="px-4 py-2.5 font-semibold">To</th>
-              <th className="px-4 py-2.5 text-right font-semibold">Amount</th>
-              {isDetailed && <th className="px-4 py-2.5 text-right font-semibold">Max fee</th>}
+              <th className={`px-4 py-2.5 font-semibold ${isDetailed ? "text-right" : ""}`}>Amount</th>
+              {isDetailed && <th className="px-4 py-2.5 text-right font-semibold">Txn Fee</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {transactions.map((tx, i) => {
-              const method = methodLabel(tx.functionSelector, tx.txType, tx.value);
-              const maxFee = isDetailed
-                ? approxTxnFeeEth(tx.gas, tx.gasPrice, tx.maxFeePerGas)
-                : null;
+              const method = tx.method ?? methodLabel(tx.functionSelector, tx.txType, tx.value);
+              // Only the "detailed" (view-all) layout has a Txn Fee column.
+              const { value: fee, isActual: isActualFee } = isDetailed
+                ? resolvedTxnFee(tx)
+                : { value: null, isActual: false };
 
               return (
                 <tr
                   key={tx.hash}
-                  className={`group h-[52px] whitespace-nowrap border-l-2 border-l-transparent transition hover:border-l-lime-bright hover:bg-lime-bright/[0.03] ${
-                    i % 2 === 1 ? "bg-surface/40" : ""
-                  }`}
+                  className={tableRowClass(i)}
                 >
                   {/* Column values: text-sm. Method + Age get their own
                       columns in "detailed"; stay stacked under the hash
@@ -97,9 +96,7 @@ export function TxTable({
 
                   {isDetailed && (
                     <td className="px-4 py-2.5 text-sm">
-                      <span className="rounded-md bg-muted/10 px-1.5 py-0.5 font-mono text-xs text-ink">
-                        {method}
-                      </span>
+                      <Chip>{method}</Chip>
                     </td>
                   )}
 
@@ -118,28 +115,28 @@ export function TxTable({
                   )}
 
                   <td className="px-4 py-2.5 text-sm">
-                    <Link href={`/address/${tx.fromAddress}`} className="text-sm text-muted hover:text-lime">
-                      {shortenHash(tx.fromAddress, 3)}
+                    <Link href={`/address/${tx.fromAddress}`} title={tx.fromAddress} className="text-sm text-muted hover:text-lime">
+                      {displayAddress(tx.fromAddress, tx.fromLabel)}
                     </Link>
                   </td>
                   <td className="px-4 py-2.5 text-sm">
                     {tx.toAddress ? (
-                      <Link href={`/address/${tx.toAddress}`} className="text-sm text-muted hover:text-lime">
-                        {shortenHash(tx.toAddress, 3)}
+                      <Link href={`/address/${tx.toAddress}`} title={tx.toAddress} className="text-sm text-muted hover:text-lime">
+                        {displayAddress(tx.toAddress, tx.toLabel)}
                       </Link>
                     ) : (
                       <span className="text-sm text-muted">Contract</span>
                     )}
                   </td>
-                  <td className="nums px-4 py-2.5 text-right text-sm text-ink">
-                    {weiToEth(tx.value, 4)}
+                  <td className={`nums px-4 py-2.5 text-sm text-ink ${isDetailed ? "text-right" : ""}`}>
+                    {weiToEth(tx.value, 4)} ETH
                   </td>
                   {isDetailed && (
                     <td
                       className="nums px-4 py-2.5 text-right text-sm text-muted"
-                      title="gas limit × max fee per gas — the most the sender allowed this tx to cost, not the actual amount charged (per-tx gas used isn't indexed yet)"
+                      title={isActualFee ? TXN_FEE_TOOLTIP.actual : TXN_FEE_TOOLTIP.approx}
                     >
-                      {maxFee ?? "—"}
+                      {fee !== null ? `${fee} ETH` : "—"}
                     </td>
                   )}
                 </tr>
@@ -149,14 +146,7 @@ export function TxTable({
         </table>
       </div>
 
-      {viewAllHref && (
-        <Link
-          href={viewAllHref}
-          className="block border-t border-border bg-surface px-4 py-2.5 text-center text-sm font-medium text-lime hover:bg-lime/5"
-        >
-          View all transactions →
-        </Link>
-      )}
+      {viewAllHref && <ViewAllLink href={viewAllHref} label="transactions" />}
     </div>
   );
 }

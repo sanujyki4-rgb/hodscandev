@@ -1,7 +1,11 @@
 import Link from "next/link";
 import type { L1ToL2MessageSummary } from "@/lib/api";
 import { shortenHash, timeAgo } from "@/lib/format";
+import { tableRowClass } from "@/lib/tableStyles";
 import { LayersIcon } from "./icons";
+import { EmptyState } from "./EmptyState";
+import { ViewAllLink } from "./ViewAllLink";
+import { Badge } from "./Badge";
 
 /**
  * Dedicated table for L1->L2 messages (Bridge contract retryable
@@ -45,11 +49,7 @@ export function L1L2Table({
   variant?: "compact" | "detailed";
 }) {
   if (messages.length === 0) {
-    return (
-      <p className="rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm text-muted">
-        No L1↔L2 messages indexed yet.
-      </p>
-    );
+    return <EmptyState message="No L1↔L2 messages indexed yet." />;
   }
 
   return (
@@ -79,9 +79,7 @@ export function L1L2Table({
           <tbody className="divide-y divide-border">
             {messages.map((msg, i) => {
               const age = timeAgo(msg.l2Block?.timestamp ?? msg.originTimestamp);
-              const rowClass = `group h-[52px] whitespace-nowrap border-l-2 border-l-transparent transition hover:border-l-lime-bright hover:bg-lime-bright/[0.03] ${
-                i % 2 === 1 ? "bg-surface/40" : ""
-              }`;
+              const rowClass = tableRowClass(i);
 
               // View-all (detailed): all column values including Age + Queue = text-sm.
               // Homepage (compact): Age + Queue stay text-xs; primary values text-sm.
@@ -137,15 +135,9 @@ export function L1L2Table({
                       {msg.l2Block ? msg.l2Block.number : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-sm">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-sm font-medium ${
-                          msg.status === "relayed"
-                            ? "bg-lime/15 text-lime"
-                            : "bg-warning/15 text-warning"
-                        }`}
-                      >
+                      <Badge tone={msg.status === "relayed" ? "positive" : "warning"}>
                         {msg.status === "relayed" ? "Relayed" : "Pending"}
-                      </span>
+                      </Badge>
                     </td>
                   </tr>
                 );
@@ -215,14 +207,7 @@ export function L1L2Table({
         </table>
       </div>
 
-      {viewAllHref && (
-        <Link
-          href={viewAllHref}
-          className="block border-t border-border bg-surface px-4 py-2.5 text-center text-sm font-medium text-lime hover:bg-lime/5"
-        >
-          View all L1↔L2 messages →
-        </Link>
-      )}
+      {viewAllHref && <ViewAllLink href={viewAllHref} label="L1↔L2 messages" />}
     </div>
   );
 }

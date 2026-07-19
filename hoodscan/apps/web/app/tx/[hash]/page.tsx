@@ -1,18 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTransactionByHash } from "@/lib/api";
-import { weiToEth, timeAgo } from "@/lib/format";
+import { weiToEth, timeAgo, methodLabel, shortTokenAmount } from "@/lib/format";
+import { isSystemTxType, isL1ToL2TxType } from "@hoodscan/types";
+import { ContractIcon } from "@/components/ContractIcon";
+import { DetailRow } from "@/components/DetailRow";
+import { Badge } from "@/components/Badge";
+import { Chip } from "@/components/Chip";
 
 export const revalidate = 15;
-
-function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border py-2.5 last:border-b-0">
-      <span className="shrink-0 text-sm text-muted">{label}</span>
-      <span className="break-all text-right font-mono text-sm text-ink">{value}</span>
-    </div>
-  );
-}
 
 export default async function TransactionPage({
   params,
@@ -23,8 +19,8 @@ export default async function TransactionPage({
 
   if (!tx) notFound();
 
-  const isSystemTx = tx.txType === "0x6a";
-  const isL1ToL2 = tx.txType === "0x69";
+  const isSystemTx = isSystemTxType(tx.txType);
+  const isL1ToL2 = isL1ToL2TxType(tx.txType);
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,24 +30,18 @@ export default async function TransactionPage({
         </h1>
         <div className="flex items-center gap-2">
           {isSystemTx && (
-            <span className="rounded-full bg-muted/15 px-2.5 py-1 text-xs font-medium text-muted">
+            <Badge tone="muted" className="rounded-full px-2.5 py-1 text-xs">
               System tx
-            </span>
+            </Badge>
           )}
           {isL1ToL2 && (
-            <span className="rounded-full bg-lime/15 px-2.5 py-1 text-xs font-medium text-lime">
+            <Badge tone="positive" className="rounded-full px-2.5 py-1 text-xs">
               L1↔L2 Message
-            </span>
+            </Badge>
           )}
-          <span
-            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-              tx.block.isFinalized
-                ? "bg-lime/15 text-lime"
-                : "bg-muted/15 text-muted"
-            }`}
-          >
+          <Badge tone={tx.block.isFinalized ? "positive" : "muted"} className="rounded-full px-2.5 py-1 text-xs">
             {tx.block.isFinalized ? "Finalized" : "Pending"}
-          </span>
+          </Badge>
         </div>
       </div>
 
@@ -67,6 +57,10 @@ export default async function TransactionPage({
         />
         <DetailRow label="Timestamp" value={timeAgo(tx.block.timestamp)} />
         <DetailRow label="Type" value={tx.txTypeLabel} />
+        <DetailRow
+          label="Method"
+          value={<Chip>{tx.method ?? methodLabel(tx.functionSelector, tx.txType)}</Chip>}
+        />
         {isL1ToL2 && (
           <DetailRow
             label="L1 Transaction"
@@ -89,18 +83,24 @@ export default async function TransactionPage({
         <DetailRow
           label="From"
           value={
-            <Link href={`/address/${tx.fromAddress}`} className="text-lime hover:underline">
-              {tx.fromAddress}
-            </Link>
+            <span className="inline-flex items-center gap-1">
+              {tx.fromIsContract ? <ContractIcon /> : null}
+              <Link href={`/address/${tx.fromAddress}`} title={tx.fromAddress} className="text-lime hover:underline">
+                {tx.fromLabel ?? tx.fromAddress}
+              </Link>
+            </span>
           }
         />
         <DetailRow
           label="To"
           value={
             tx.toAddress ? (
-              <Link href={`/address/${tx.toAddress}`} className="text-lime hover:underline">
-                {tx.toAddress}
-              </Link>
+              <span className="inline-flex items-center gap-1">
+                {tx.toIsContract ? <ContractIcon /> : null}
+                <Link href={`/address/${tx.toAddress}`} title={tx.toAddress} className="text-lime hover:underline">
+                  {tx.toLabel ?? tx.toAddress}
+                </Link>
+              </span>
             ) : (
               <span className="text-muted">Contract creation</span>
             )
@@ -114,6 +114,92 @@ export default async function TransactionPage({
           <DetailRow label="Function selector" value={tx.functionSelector} />
         )}
       </div>
+
+      {tx.tokenTransfer && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+            Token Transfer
+          </h2>
+          <div className="rounded-xl border border-border bg-surface px-4">
+            <DetailRow
+              label="Asset"
+              value={
+                <Link
+                  href={`/address/${tx.tokenTransfer.tokenAddress}`}
+                  title={tx.tokenTransfer.tokenAddress}
+                  className="text-lime hover:underline"
+                >
+                  {tx.tokenTransfer.symbol ??
+                    tx.tokenTransfer.name ??
+                    tx.tokenTransfer.tokenAddress}
+                </Link>
+              }
+            />
+            <DetailRow
+              label="Amount"
+              value={
+                <span title={tx.tokenTransfer.amount ?? `${tx.tokenTransfer.rawAmount} (raw)`}>
+                  {shortTokenAmount(tx.tokenTransfer.amount, tx.tokenTransfer.rawAmount)}
+                  {tx.tokenTransfer.symbol ? ` ${tx.tokenTransfer.symbol}` : ""}
+                </span>
+              }
+            />
+            {tx.tokenTransfer.from && (
+              <DetailRow
+                label="From"
+                value={
+                  <Link
+                    href={`/address/${tx.tokenTransfer.from}`}
+                    className="text-lime hover:underline"
+                  >
+                    {tx.tokenTransfer.from}
+                  </Link>
+                }
+              />
+            )}
+            <DetailRow
+              label="To"
+              value={
+                <Link
+                  href={`/address/${tx.tokenTransfer.to}`}
+                  className="text-lime hover:underline"
+                >
+                  {tx.tokenTransfer.to}
+                </Link>
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {tx.decodedInput && tx.decodedInput.args.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-sm font-medium uppercase tracking-wide text-muted">
+            Decoded Input
+          </h2>
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+            <p className="break-all font-mono text-xs text-muted">
+              {tx.decodedInput.signature}
+            </p>
+            <div className="flex flex-col gap-2">
+              {tx.decodedInput.args.map((arg, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col gap-1 border-b border-border pb-2 last:border-b-0 last:pb-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-ink">{arg.name}</span>
+                    <span className="text-xs text-muted">{arg.type}</span>
+                  </div>
+                  <span className="break-all font-mono text-sm text-ink">
+                    {arg.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted">

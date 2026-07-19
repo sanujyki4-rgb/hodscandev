@@ -1,0 +1,45 @@
+$kind: http-request
+name: List latest blocks
+method: GET
+url: '{{baseUrl}}/blocks?limit=20'
+order: 1000
+queryParams:
+  - key: limit
+    value: '20'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('body has pagination envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.blocks).to.be.an('array');
+        pm.expect(json.total).to.be.a('number');
+        pm.expect(json.limit).to.be.a('number');
+        pm.expect(json.offset).to.be.a('number');
+      });
+      pm.test('first block shape and BigInt-as-string', function () {
+        var arr = pm.response.json().blocks;
+        if (arr.length > 0) {
+          var b = arr[0];
+          pm.expect(b.number).to.be.a('string');
+          pm.expect(b.hash).to.be.a('string');
+          pm.expect(b.timestamp).to.be.a('string');
+          pm.expect(b.txCount).to.be.a('number');
+          pm.expect(b.gasUsed).to.be.a('string');
+        }
+      });
+      pm.test('capture blockNumber for chaining', function () {
+        var arr = pm.response.json().blocks;
+        if (Array.isArray(arr) && arr.length > 0 && arr[0].number) {
+          pm.environment.set('blockNumber', arr[0].number);
+        }
+      });

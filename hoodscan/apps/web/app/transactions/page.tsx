@@ -34,6 +34,7 @@ export default async function AllTransactionsPage({
             page={page}
             limit={data.limit}
             total={data.total}
+            noun="transactions"
           />
         </>
       )}

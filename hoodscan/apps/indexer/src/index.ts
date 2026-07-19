@@ -2,6 +2,8 @@ import { INDEXER_POLL_INTERVAL_MS } from "@hoodscan/config";
 import { pollLatestBlock } from "./jobs/pollLatestBlock";
 import { pollFinalizedBlock } from "./jobs/pollFinalizedBlock";
 import { backfillBlocks } from "./jobs/backfillBlocks";
+import { backfillReceipts } from "./jobs/backfillReceipts";
+import { backfillNftTransfers } from "./jobs/backfillNftTransfers";
 import { watchL1Messages } from "./jobs/watchL1Messages";
 
 // L1 blocks land roughly every ~12s — no need to poll anywhere near
@@ -66,6 +68,21 @@ async function main() {
   console.log("[indexer] Starting background backfill (non-blocking)...");
   void backfillBlocks({ concurrency: 5 }).catch((err) => {
     console.error("[indexer] Background backfill failed:", err);
+  });
+
+  // Receipt backfill for older rows missing gasUsed/effectiveGasPrice
+  // (the actual tx fee). Throttled internally; runs in the background.
+  console.log("[indexer] Starting receipt backfill (non-blocking)...");
+  void backfillReceipts().catch((err) => {
+    console.error("[indexer] Receipt backfill failed:", err);
+  });
+
+  // NFT backfill: historical ERC-721/1155 transfers. Cursor-based so it
+  // resumes across restarts and no-ops once caught up. Runs concurrently
+  // with the other backfills so live + historical stay balanced.
+  console.log("[indexer] Starting NFT backfill (non-blocking)...");
+  void backfillNftTransfers().catch((err) => {
+    console.error("[indexer] NFT backfill failed:", err);
   });
 }
 

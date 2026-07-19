@@ -1,6 +1,7 @@
 import { createPublicClient, http, defineChain } from "viem";
 import { providers } from "ethers";
 import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
+import type { RawReceipt } from "@hoodscan/types";
 
 /**
  * Robinhood Chain mainnet definition for viem.
@@ -44,3 +45,16 @@ export const l2EthersProvider = new providers.JsonRpcProvider(
     chainId: ROBINHOOD_CHAIN_ID,
   }
 );
+
+/**
+ * Fetch all transaction receipts for a block in a single round-trip
+ * (eth_getBlockReceipts). Used to populate gasUsed + effectiveGasPrice
+ * for the ACTUAL tx fee, which the block/tx object alone doesn't carry.
+ * `blockParam` is a hex block number ("0x...") or a tag ("latest").
+ * Uses the ethers provider's generic send() to avoid viem's method
+ * schema not typing this Arbitrum/Geth RPC method. Returns [] on null.
+ */
+export async function getBlockReceipts(blockParam: string): Promise<RawReceipt[]> {
+  const receipts = await l2EthersProvider.send("eth_getBlockReceipts", [blockParam]);
+  return (receipts ?? []) as RawReceipt[];
+}

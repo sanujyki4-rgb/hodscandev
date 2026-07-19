@@ -34,3 +34,20 @@ export const L1_RPC_URL_MAINNET = process.env.L1_RPC_URL_MAINNET ?? "";
 export const INDEXER_POLL_INTERVAL_MS = Number(
   process.env.INDEXER_POLL_INTERVAL_MS ?? 500
 );
+
+// Etherscan/Arbiscan cap their global list pages to the most recent
+// ~500k records ("Showing the last 500k records"). We mirror that: it
+// bounds count(*) and deep-offset costs to at most this many rows.
+export const EXPLORER_LIST_CAP = Number(
+  process.env.EXPLORER_LIST_CAP ?? 500000
+);
+
+// Receipt backfill (jobs/backfillReceipts.ts): blocks scanned per pass
+// and pause between blocks. Conservative because the public RPC is
+// rate-limited; raise batch / lower delay on your own node.
+export const RECEIPT_BACKFILL_BATCH_BLOCKS = Number(
+  process.env.RECEIPT_BACKFILL_BATCH_BLOCKS ?? 25
+);
+export const RECEIPT_BACKFILL_DELAY_MS = Number(
+  process.env.RECEIPT_BACKFILL_DELAY_MS ?? 200
+);
