@@ -1,0 +1,14 @@
+$kind: http-request
+name: eth_getLogs
+method: POST
+url: '{{baseUrl}}'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_getLogs","params":[{"fromBlock":"0xd3d8f7","toBlock":"0xd3d900"}]}

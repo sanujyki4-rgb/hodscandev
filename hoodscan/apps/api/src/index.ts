@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { describeL2RpcEndpoints, L2_RPC_URLS } from "@hoodscan/rpc";
 import blocksRouter from "./routes/blocks.route";
 import transactionsRouter from "./routes/transactions.route";
 import addressRouter from "./routes/address.route";
@@ -50,4 +51,7 @@ app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`[api] hoodscan API listening on http://localhost:${PORT}`);
+  console.log(
+    `[api] L2 RPC endpoints (${L2_RPC_URLS.length}): ${describeL2RpcEndpoints()}`
+  );
 });

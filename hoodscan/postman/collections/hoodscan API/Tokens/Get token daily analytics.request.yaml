@@ -1,7 +1,7 @@
 $kind: http-request
 name: Get per-day token analytics
 method: GET
-url: '{{baseUrl}}/tokens/{{address}}/daily?days=30'
+url: '{{baseUrl}}/tokens/{{tokenAddress}}/daily?days=30'
 order: 5000
 queryParams:
   - key: days

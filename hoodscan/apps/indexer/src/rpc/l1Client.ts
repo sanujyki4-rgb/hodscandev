@@ -1,7 +1,5 @@
-import { providers } from "ethers";
 import { registerCustomArbitrumNetwork } from "@arbitrum/sdk";
 import {
-  L1_RPC_URL_MAINNET,
   L1_BRIDGE_ADDRESS,
   L1_DELAYED_INBOX_ADDRESS,
   L1_SEQUENCER_INBOX_ADDRESS,
@@ -9,16 +7,20 @@ import {
   L1_ROLLUP_ADDRESS,
   ROBINHOOD_CHAIN_ID,
 } from "@hoodscan/config";
+import {
+  createL1EthersProvider,
+  describeL1RpcEndpoints,
+  L1_RPC_URLS,
+} from "@hoodscan/rpc";
 
 /**
  * @arbitrum/sdk is built on ethers (v5), not viem — separate provider
  * from the main viem `rpcClient` used for Robinhood Chain itself.
- * This one talks to Ethereum L1 and is only used by the L1->L2
- * message watcher job (see jobs/watchL1Messages.ts).
+ * This one talks to Ethereum L1 (multi-URL: Alchemy keys + others)
+ * and is only used by the L1->L2 message watcher job.
+ * Null when no L1 RPC is configured.
  */
-export const l1Provider = L1_RPC_URL_MAINNET
-  ? new providers.JsonRpcProvider(L1_RPC_URL_MAINNET)
-  : null;
+export const l1Provider = createL1EthersProvider({ stallTimeout: 2_500 });
 
 let registered = false;
 
@@ -49,4 +51,10 @@ export function registerRobinhoodChainWithSdk() {
   } as Parameters<typeof registerCustomArbitrumNetwork>[0]);
 
   registered = true;
+}
+
+export function logL1RpcConfig(): void {
+  console.log(
+    `[rpc] L1 endpoints (${L1_RPC_URLS.length}): ${describeL1RpcEndpoints()}`
+  );
 }

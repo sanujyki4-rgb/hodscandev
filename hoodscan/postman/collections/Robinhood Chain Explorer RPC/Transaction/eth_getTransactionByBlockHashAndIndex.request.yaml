@@ -1,0 +1,14 @@
+$kind: http-request
+name: eth_getTransactionByBlockHashAndIndex
+method: POST
+url: '{{baseUrl}}'
+order: 4000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_getTransactionByBlockHashAndIndex","params":["{{blockHash}}","0x1"]}

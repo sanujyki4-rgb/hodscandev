@@ -1,7 +1,7 @@
 $kind: http-request
 name: Get token detail
 method: GET
-url: '{{baseUrl}}/tokens/{{address}}'
+url: '{{baseUrl}}/tokens/{{tokenAddress}}'
 order: 2000
 scripts:
   - type: afterResponse

@@ -9,35 +9,9 @@
  * This is Layer 1 — the foundation. It is consumed by token-transfer
  * asset display (Layer 2) and the future token transfers tab (Layer 3).
  */
-import { createPublicClient, http, defineChain, hexToString } from "viem";
-import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
+import { hexToString } from "viem";
 import { redis } from "../middlewares/cache";
-
-/**
- * Robinhood Chain mainnet definition for viem — same shape as
- * contractType.ts so both read chain state identically.
- */
-const robinhoodChain = defineChain({
-  id: ROBINHOOD_CHAIN_ID,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: { http: [RPC_URL_MAINNET] },
-  },
-});
-
-/**
- * Read-only viem public client. Conservative retries/timeout so a slow
- * RPC can't cascade into a request storm on the detail endpoint.
- */
-const rpcClient = createPublicClient({
-  chain: robinhoodChain,
-  transport: http(RPC_URL_MAINNET, {
-    retryCount: 1,
-    retryDelay: 300,
-    timeout: 3_000,
-  }),
-});
+import { rpcClient } from "./rpcClient";
 
 /**
  * Minimal ERC-20 metadata ABI. name()/symbol() return string on modern

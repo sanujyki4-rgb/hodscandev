@@ -1,0 +1,14 @@
+$kind: http-request
+name: eth_newBlockFilter
+method: POST
+url: '{{baseUrl}}'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_newBlockFilter","params":[]}

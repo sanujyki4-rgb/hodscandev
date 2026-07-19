@@ -8,28 +8,13 @@
  * Chain RPC node — no external APIs. Mirrors the viem client + caching
  * philosophy of contractType.ts / tokenResolver.ts.
  */
-import { createPublicClient, http, defineChain } from "viem";
 import type { AbiFunction } from "viem";
-import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
 import { getContractType } from "./contractType";
 import { getTokenMetadata } from "./tokenResolver";
+import { readRpcClient } from "./rpcClient";
 
-const robinhoodChain = defineChain({
-  id: ROBINHOOD_CHAIN_ID,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: { default: { http: [RPC_URL_MAINNET] } },
-});
-
-/** Shared read-only client — same conservative retry/timeout as siblings. */
-export const readRpcClient = createPublicClient({
-  chain: robinhoodChain,
-  transport: http(RPC_URL_MAINNET, {
-    retryCount: 1,
-    retryDelay: 300,
-    timeout: 3_000,
-  }),
-});
+/** Re-export shared multi-RPC client for controllers that import from here. */
+export { readRpcClient };
 
 export type ReadStandard = "erc20" | "erc721" | "erc1155";
 

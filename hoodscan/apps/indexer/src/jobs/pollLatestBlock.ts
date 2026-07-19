@@ -41,5 +41,11 @@ export async function pollLatestBlock(): Promise<bigint | null> {
   const tokenTransfers = extractTokenTransfers(receipts, block.number, block.timestamp);
   await saveTokenTransfers(tokenTransfers);
 
+  // Same receipts → ERC-721 / ERC-1155 transfers for the NFT tab.
+  // (Previously only the NFT backfill job wrote these, so live blocks
+  // could lag until backfill caught up.)
+  const nftTransfers = extractNftTransfers(receipts, block.number, block.timestamp);
+  await saveNftTransfers(nftTransfers);
+
   return block.number;
 }

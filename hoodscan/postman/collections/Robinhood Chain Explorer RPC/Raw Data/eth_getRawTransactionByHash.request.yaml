@@ -1,0 +1,14 @@
+$kind: http-request
+name: eth_getRawTransactionByHash
+method: POST
+url: '{{baseUrl}}'
+order: 1000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_getRawTransactionByHash","params":["{{txHash}}"]}

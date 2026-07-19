@@ -9,27 +9,8 @@
  * (no external APIs). Mirrors the viem client + Redis caching pattern of
  * apps/api/src/utils/contractType.ts.
  */
-import { createPublicClient, http, defineChain } from "viem";
-import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
 import { redis } from "../middlewares/cache";
-
-const robinhoodChain = defineChain({
-  id: ROBINHOOD_CHAIN_ID,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: { http: [RPC_URL_MAINNET] },
-  },
-});
-
-const rpcClient = createPublicClient({
-  chain: robinhoodChain,
-  transport: http(RPC_URL_MAINNET, {
-    retryCount: 1,
-    retryDelay: 300,
-    timeout: 3_000,
-  }),
-});
+import { rpcClient } from "./rpcClient";
 
 const CACHE_PREFIX = "hoodscan:iscontract:";
 const TTL_CONTRACT = 60 * 60 * 24 * 30; // 30 days — code is effectively permanent

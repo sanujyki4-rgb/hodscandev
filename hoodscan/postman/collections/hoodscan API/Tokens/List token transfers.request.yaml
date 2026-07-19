@@ -1,7 +1,7 @@
 $kind: http-request
 name: List transfers for a token
 method: GET
-url: '{{baseUrl}}/tokens/{{address}}/transfers?limit=25&offset=0'
+url: '{{baseUrl}}/tokens/{{tokenAddress}}/transfers?limit=25&offset=0'
 order: 3000
 queryParams:
   - key: limit

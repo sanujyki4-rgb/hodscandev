@@ -5,6 +5,8 @@ import { backfillBlocks } from "./jobs/backfillBlocks";
 import { backfillReceipts } from "./jobs/backfillReceipts";
 import { backfillNftTransfers } from "./jobs/backfillNftTransfers";
 import { watchL1Messages } from "./jobs/watchL1Messages";
+import { logL2RpcConfig } from "./rpc/client";
+import { logL1RpcConfig } from "./rpc/l1Client";
 
 // L1 blocks land roughly every ~12s — no need to poll anywhere near
 // as often as the L2 poll loop above.
@@ -49,6 +51,8 @@ async function pollLoop() {
 
 async function main() {
   console.log("[indexer] Starting hoodscan indexer...");
+  logL2RpcConfig();
+  logL1RpcConfig();
 
   // Live L2 poll + L1 watcher start immediately — do not wait for backfill.
   // Block/tx writes are idempotent (upsert / skipDuplicates), so concurrent
@@ -59,7 +63,7 @@ async function main() {
   void pollLoop();
   setInterval(pollLoop, INDEXER_POLL_INTERVAL_MS);
 
-  // L1 message watcher — no-ops if L1_RPC_URL_MAINNET isn't set.
+  // L1 message watcher — no-ops if no L1 RPC URLs are configured.
   void l1WatchLoop();
   setInterval(l1WatchLoop, L1_WATCH_INTERVAL_MS);
 

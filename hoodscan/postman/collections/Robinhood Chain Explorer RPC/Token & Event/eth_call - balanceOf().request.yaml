@@ -1,0 +1,14 @@
+$kind: http-request
+name: eth_call - balanceOf()
+method: POST
+url: '{{baseUrl}}'
+order: 7000
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_call","params":[{"to":"{{tokenAddress}}","data":"0x70a08231000000000000000000000000fc78968f91200892f42125bf71da6c97fd0ae4a3"},"latest"]}

@@ -26,6 +26,9 @@ importers:
       '@hoodscan/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@hoodscan/rpc':
+        specifier: workspace:*
+        version: link:../../packages/rpc
       '@hoodscan/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -72,6 +75,9 @@ importers:
       '@hoodscan/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@hoodscan/rpc':
+        specifier: workspace:*
+        version: link:../../packages/rpc
       '@hoodscan/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -147,6 +153,22 @@ importers:
       prisma:
         specifier: ^5.18.0
         version: 5.22.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+
+  packages/rpc:
+    dependencies:
+      '@hoodscan/config':
+        specifier: workspace:*
+        version: link:../config
+      ethers:
+        specifier: ^5.7.2
+        version: 5.8.0
+      viem:
+        specifier: ^2.21.0
+        version: 2.55.0(typescript@5.9.3)
+    devDependencies:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

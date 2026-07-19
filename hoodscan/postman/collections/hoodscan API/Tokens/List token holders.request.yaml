@@ -1,7 +1,7 @@
 $kind: http-request
 name: List token holders
 method: GET
-url: '{{baseUrl}}/tokens/{{address}}/holders?limit=25&offset=0'
+url: '{{baseUrl}}/tokens/{{tokenAddress}}/holders?limit=25&offset=0'
 order: 4000
 queryParams:
   - key: limit

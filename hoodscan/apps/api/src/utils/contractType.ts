@@ -8,35 +8,8 @@
  * pattern in apps/indexer/src/rpc/client.ts and the caching philosophy
  * of apps/api/src/utils/methodResolver.ts.
  */
-import { createPublicClient, http, defineChain } from "viem";
-import { RPC_URL_MAINNET, ROBINHOOD_CHAIN_ID } from "@hoodscan/config";
 import { redis } from "../middlewares/cache";
-
-/**
- * Robinhood Chain mainnet definition for viem — same shape as the
- * indexer's client so both apps read chain state identically.
- */
-const robinhoodChain = defineChain({
-  id: ROBINHOOD_CHAIN_ID,
-  name: "Robinhood Chain",
-  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-  rpcUrls: {
-    default: { http: [RPC_URL_MAINNET] },
-  },
-});
-
-/**
- * Read-only viem public client. Conservative retries/timeout so a slow
- * RPC can't cascade into a request storm on the detail endpoint.
- */
-const rpcClient = createPublicClient({
-  chain: robinhoodChain,
-  transport: http(RPC_URL_MAINNET, {
-    retryCount: 1,
-    retryDelay: 300,
-    timeout: 3_000,
-  }),
-});
+import { rpcClient } from "./rpcClient";
 
 /** Minimal ERC-165 ABI — only the one method we need. */
 const SUPPORTS_INTERFACE_ABI = [
