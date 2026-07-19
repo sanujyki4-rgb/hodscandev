@@ -165,3 +165,72 @@ export const RECEIPT_BACKFILL_BATCH_BLOCKS = Number(
 export const RECEIPT_BACKFILL_DELAY_MS = Number(
   process.env.RECEIPT_BACKFILL_DELAY_MS ?? 200
 );
+
+// ---------------------------------------------------------------------------
+// Capability-aware multi-provider RPC (packages/rpc/src/providerRoles.ts)
+//
+// Robinhood Chain has no single RPC that is both cheap AND full-featured, so
+// we split traffic across three providers by capability ("role"):
+//
+//   ZAN       role "bulk"    → eth_getBlockByNumber / eth_getBlockReceipts /
+//                              eth_getLogs over large ranges (up to 10k blocks).
+//                              Highest monthly quota. Blocks debug_trace* on the
+//                              free tier, so it must NEVER be used for traces.
+//   Uniblock  role "trace"   → debug_traceBlockByNumber / debug_traceTransaction
+//             + "primary"       / debug_traceCall (ZAN can't do these) and the
+//                              general-purpose primary for everything else.
+//                              Requires an "X-API-KEY" header (UNIBLOCK_API_KEY).
+//   QuickNode role "fallback"→ last resort only. Its eth_getLogs is capped at a
+//                              5-block range, so it must NEVER be used for large
+//                              log ranges.
+//
+// Each provider is configured from env. Values are comma/whitespace separated
+// URL lists (parseEnvList) so a single provider can still have >1 endpoint.
+//   ZAN_RPC_URLS            e.g. https://api.zan.top/node/v1/rh/mainnet/KEY
+//   UNIBLOCK_RPC_URLS       e.g. https://rpc.uniblock.dev/... (needs API key)
+//   UNIBLOCK_API_KEY        sent as the "X-API-KEY" header (NEVER inline it)
+//   QUICKNODE_RPC_URLS      e.g. https://xxx.quiknode.pro/KEY/
+//
+// Any provider with no configured URL is simply skipped. If NONE are set the
+// router falls back to L2_RPC_URLS (the public/default RPC) as a single
+// "primary+bulk+fallback" provider so local dev still works.
+// ---------------------------------------------------------------------------
+
+export const ZAN_RPC_URLS: string[] = parseEnvList(process.env.ZAN_RPC_URLS);
+
+export const UNIBLOCK_RPC_URLS: string[] = parseEnvList(
+  process.env.UNIBLOCK_RPC_URLS
+);
+
+/** Uniblock requires this in an "X-API-KEY" request header. Never inlined. */
+export const UNIBLOCK_API_KEY: string =
+  process.env.UNIBLOCK_API_KEY?.trim() ?? "";
+
+export const QUICKNODE_RPC_URLS: string[] = parseEnvList(
+  process.env.QUICKNODE_RPC_URLS
+);
+
+// Largest block range we let the bulk provider (ZAN) request in a single
+// eth_getLogs / range call. QuickNode is capped far lower (see below).
+export const ZAN_MAX_LOG_RANGE_BLOCKS = Number(
+  process.env.ZAN_MAX_LOG_RANGE_BLOCKS ?? 10_000
+);
+
+// QuickNode's eth_getLogs is limited to a 5-block window — the router uses
+// this to refuse routing large log ranges to the fallback provider.
+export const QUICKNODE_MAX_LOG_RANGE_BLOCKS = Number(
+  process.env.QUICKNODE_MAX_LOG_RANGE_BLOCKS ?? 5
+);
+
+// ---------------------------------------------------------------------------
+// Gapless backfill orchestrator (apps/indexer/src/jobs/backfillGapless.ts)
+//
+// Iterates a contiguous block range (optionally latest→oldest) with a
+// persisted checkpoint, per-block verify, and a failed-block retry queue.
+//   BACKFILL_START_BLOCK   inclusive range start (default: chain head)
+//   BACKFILL_END_BLOCK     inclusive range end   (default: 0)
+//   BACKFILL_DIRECTION     "reverse" (latest→oldest, default) | "forward"
+//   BACKFILL_DELAY_MS      throttle between blocks (default 100ms)
+// ---------------------------------------------------------------------------
+
+export const BACKFILL_DELAY_MS = Number(process.env.BACKFILL_DELAY_MS ?? 100);

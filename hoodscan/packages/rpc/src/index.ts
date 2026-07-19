@@ -21,3 +21,15 @@ export {
   L1_RPC_URL_MAINNET,
   L1_CHAIN_ID,
 } from "./l1";
+export {
+  sendRpc,
+  rolesForMethod,
+  describeProviders,
+  listProviders,
+  RpcError,
+} from "./providerRoles";
+export type {
+  ProviderRole,
+  ProviderConfig,
+  SendRpcOptions,
+} from "./providerRoles";
