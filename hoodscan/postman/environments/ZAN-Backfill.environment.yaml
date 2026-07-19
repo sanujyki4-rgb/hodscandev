@@ -1,0 +1,8 @@
+name: ZAN-Backfill
+values:
+  - key: baseUrl
+    value: 'https://api.zan.top/node/v1/robinhood/mainnet/2f572f8319004705b683221368b31aaf'
+  - key: apiKey
+    value: ''
+  - key: providerRole
+    value: 'bulk (block/tx/logs massal) - kuota 150jt, log range 10.000 blok'

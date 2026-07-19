@@ -1,0 +1,8 @@
+name: Uniblock-Primary
+values:
+  - key: baseUrl
+    value: 'https://api.uniblock.dev/uni/v1/json-rpc?chainId=4663'
+  - key: apiKey
+    value: d2z-g0kLz31qctZKcNfUHs2X4eds7WqsKYrmY4ViDZ4
+  - key: providerRole
+    value: 'primary harian + block trace (paling lengkap) - butuh X-API-KEY'

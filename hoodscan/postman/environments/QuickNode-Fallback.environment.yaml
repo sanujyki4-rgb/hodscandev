@@ -1,0 +1,8 @@
+name: QuickNode-Fallback
+values:
+  - key: baseUrl
+    value: 'https://little-icy-yard.robinhood-mainnet.quiknode.pro/1aa979eaf2eff5713b2a0712ad459ba296b9598b/'
+  - key: apiKey
+    value: ''
+  - key: providerRole
+    value: 'fallback darurat (kuota kecil 10jt) - JANGAN getLogs range besar (maks 5 blok)'
