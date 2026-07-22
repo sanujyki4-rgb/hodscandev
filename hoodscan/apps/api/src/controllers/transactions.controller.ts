@@ -153,12 +153,27 @@ export async function getTransactionByHash(req: Request, res: Response) {
   const { l1ToL2Message, ...rest } = tx;
   const withLabels = withAddressLabels(rest);
 
+  // Token-contract flags for the from/to parties (drives the token-logo icon).
+  const _tokTx = await prisma.token.findMany({
+    where: {
+      address: {
+        in: [rest.fromAddress, rest.toAddress]
+          .filter((a): a is string => !!a)
+          .map((a) => a.toLowerCase()),
+      },
+    },
+    select: { address: true },
+  });
+  const _tokTxSet = new Set(_tokTx.map((t) => t.address));
+
   res.json(
     serializeBigInt({
       ...withLabels,
       l1TxHash: l1ToL2Message?.originTxHash ?? null,
       txTypeLabel: TX_TYPE_LABELS[tx.txType] ?? "Unknown",
       fromIsContract: await isContractAddress(rest.fromAddress, true),
+      fromIsToken: rest.fromAddress ? _tokTxSet.has(rest.fromAddress.toLowerCase()) : false,
+      toIsToken: rest.toAddress ? _tokTxSet.has(rest.toAddress.toLowerCase()) : false,
       toIsContract: await isContractAddress(rest.toAddress, true),
       method: await resolveMethod(tx.functionSelector, tx.txType, true, tx.toAddress),
       decodedInput: await decodeInput(tx.input, tx.functionSelector),

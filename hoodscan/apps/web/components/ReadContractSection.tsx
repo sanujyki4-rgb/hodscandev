@@ -7,6 +7,8 @@ import {
   type ContractReadFunction,
   type ReadContractResponse,
 } from "@/lib/api";
+import { Callout } from "./Callout";
+import { Loading } from "./Loading";
 
 const STANDARD_LABEL: Record<string, string> = {
   erc20: "ERC-20",
@@ -108,15 +110,15 @@ export function ReadContractSection({ address }: { address: string }) {
   }, [address]);
 
   if (loading) {
-    return <p className="px-1 py-6 text-sm text-muted">Loading read functions…</p>;
+    return <Loading label="Loading read functions…" />;
   }
 
   if (!data || !data.supported) {
     return (
-      <div className="rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3 text-sm text-muted">
+      <Callout tone="warning">
         This contract doesn&apos;t match a known token standard (ERC-20/721/1155), so there&apos;s no
         standard read ABI to offer yet. Verified-source ABIs are a future phase.
-      </div>
+      </Callout>
     );
   }
 

@@ -1,9 +1,47 @@
+"use client";
+
+import { useState } from "react";
+import { addressLogoSrc } from "@/lib/api";
+
 /**
- * Small inline "contract" glyph shown next to an address that has
- * deployed bytecode (Etherscan/Arbiscan style). Rendered only when the
- * address is known to be a smart contract; wallets (EOAs) show nothing.
+ * Inline glyph shown next to a smart-contract address (Etherscan/Arbiscan
+ * style). When the address is a TOKEN contract (`isToken`), we show its logo
+ * via our own /tokens/:address/logo proxy (origin stays hidden); if that token
+ * has no logo on file the proxy 404s and we fall back to the generic contract
+ * glyph. Non-token contracts always render the generic glyph. EOAs render
+ * nothing (callers gate on isContract).
  */
-export function ContractIcon({ title = "Contract" }: { title?: string }) {
+export function ContractIcon({
+  title = "Contract",
+  address,
+  isToken,
+  size = 14,
+}: {
+  title?: string;
+  address?: string | null;
+  isToken?: boolean | null;
+  size?: number;
+}) {
+  const [errored, setErrored] = useState(false);
+  const src = isToken && address ? addressLogoSrc(address) : null;
+
+  if (src && !errored) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={title}
+        title={title}
+        width={size}
+        height={size}
+        loading="lazy"
+        onError={() => setErrored(true)}
+        style={{ width: size, height: size, borderRadius: "9999px", objectFit: "cover" }}
+        className="inline-block shrink-0 bg-surface"
+      />
+    );
+  }
+
   return (
     <span
       title={title}

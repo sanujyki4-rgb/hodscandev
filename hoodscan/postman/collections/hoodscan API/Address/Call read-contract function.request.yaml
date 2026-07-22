@@ -17,12 +17,20 @@ scripts:
   - type: afterResponse
     language: text/javascript
     code: |-
-      pm.test('status is 200', function () {
-        pm.response.to.have.status(200);
+      pm.test('status is 200 or 400 (400 when address is not a contract)', function () {
+        pm.expect(pm.response.code).to.be.oneOf([200, 400]);
       });
       pm.test('response time is below 5000ms', function () {
         pm.expect(pm.response.responseTime).to.be.below(5000);
       });
       pm.test('body is valid JSON', function () {
         pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('returns result on success or error on failure', function () {
+        var json = pm.response.json();
+        if (pm.response.code === 200) {
+          pm.expect(json, 'result present').to.have.property('result');
+        } else {
+          pm.expect(json.error, 'error').to.be.a('string');
+        }
       });

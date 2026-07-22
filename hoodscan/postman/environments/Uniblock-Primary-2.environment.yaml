@@ -1,0 +1,8 @@
+name: Uniblock-Primary-2
+values:
+  - key: baseUrl
+    value: 'https://api.uniblock.dev/uni/v1/json-rpc?chainId=4663'
+  - key: apiKey
+    value: lW8R7E1AY1s0XbPubsBgyEC014611smO_HSZwVnetOk
+  - key: providerRole
+    value: 'primary+trace endpoint #2 (API key kedua Uniblock) - butuh X-API-KEY'

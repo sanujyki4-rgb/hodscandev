@@ -55,7 +55,7 @@ export function AddressNftTransfersTable({
               </td>
               <td className="px-4 py-2.5 text-muted">{timeAgo(t.timestamp)}</td>
               <td className="px-4 py-2.5 font-mono">
-                {t.fromIsContract ? <ContractIcon /> : null}
+                {t.fromIsContract ? <ContractIcon address={t.fromAddress} isToken={t.fromIsToken} /> : null}
                 <Link
                   href={`/address/${t.fromAddress}`}
                   className="text-lime hover:underline"
@@ -76,7 +76,7 @@ export function AddressNftTransfersTable({
                 ) : null}
               </td>
               <td className="px-4 py-2.5 font-mono">
-                {t.toIsContract ? <ContractIcon /> : null}
+                {t.toIsContract ? <ContractIcon address={t.toAddress} isToken={t.toIsToken} /> : null}
                 <Link
                   href={`/address/${t.toAddress}`}
                   className="text-lime hover:underline"

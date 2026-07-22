@@ -1,0 +1,38 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/openapi.json'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "openapi": "3.0.3",
+        "info": {
+          "title": "Hoodscan API",
+          "version": "1.0.0"
+        },
+        "servers": [
+          {
+            "url": "http://localhost:4000",
+            "description": "Local development"
+          }
+        ],
+        "paths": {
+          "/health": {
+            "get": {
+              "tags": [
+                "System"
+              ],
+              "summary": "Health check"
+            }
+          }
+        }
+      }
+order: 1000

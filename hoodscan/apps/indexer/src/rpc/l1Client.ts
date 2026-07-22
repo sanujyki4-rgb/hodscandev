@@ -16,7 +16,7 @@ import {
 /**
  * @arbitrum/sdk is built on ethers (v5), not viem — separate provider
  * from the main viem `rpcClient` used for Robinhood Chain itself.
- * This one talks to Ethereum L1 (multi-URL: Alchemy keys + others)
+ * This one talks to Ethereum L1 (multi-URL: multiple providers)
  * and is only used by the L1->L2 message watcher job.
  * Null when no L1 RPC is configured.
  */

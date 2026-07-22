@@ -9,7 +9,15 @@
     "build": "tsc",
     "test:l1": "dotenv -e ../../.env -- tsx scripts/testWatchL1Message.ts",
     "backfill:nft": "dotenv -e ../../.env -- tsx scripts/backfillNftTransfers.ts",
-    "backfill:gapless": "dotenv -e ../../.env -- tsx src/jobs/backfillGapless.ts"
+    "backfill:gapless": "dotenv -e ../../.env -- tsx src/jobs/backfillGapless.ts",
+    "backfill:internal": "dotenv -e ../../.env -- tsx src/jobs/backfillInternalTx.ts",
+    "backfill:logs": "dotenv -e ../../.env -- tsx src/jobs/backfillLogs.ts",
+    "test:backoff": "tsx scripts/testBackoff.ts",
+    "backfill:retry": "dotenv -e ../../.env -- tsx scripts/retryFailedBlocks.ts",
+    "backfill:recompute": "dotenv -e ../../.env -- tsx scripts/recomputeTokenAggregates.ts",
+    "cleanup:tokenmeta": "dotenv -e ../../.env -- tsx scripts/cleanupTokenMeta.ts",
+    "backfill:tokenlogos": "dotenv -e ../../.env -- tsx scripts/backfillTokenLogos.ts",
+    "backfill:token-daily": "dotenv -e ../../.env -- tsx src/jobs/backfillTokenDailyStats.ts"
   },
   "dependencies": {
     "@hoodscan/database": "workspace:*",
@@ -18,6 +26,7 @@
     "@hoodscan/rpc": "workspace:*",
     "@arbitrum/sdk": "^4.0.0",
     "ethers": "^5.7.2",
+    "ioredis": "^5.4.0",
     "viem": "^2.21.0"
   },
   "devDependencies": {

@@ -22,16 +22,18 @@ function PartyAddress({
   isSelf,
   label,
   isContract,
+  isToken,
 }: {
   value: string;
   isSelf: boolean;
   label?: string | null;
   isContract?: boolean | null;
+  isToken?: boolean | null;
 }) {
   const display = displayAddress(value, label);
   return (
     <span className="inline-flex items-center gap-1">
-      {isContract ? <ContractIcon /> : null}
+      {isContract ? <ContractIcon address={value} isToken={isToken} /> : null}
       {isSelf ? (
         <span className="cursor-text font-medium text-ink" title={value}>
           {display}
@@ -124,7 +126,7 @@ export function AddressTxTable({
                     {tx.block?.timestamp ? timeAgo(tx.block.timestamp) : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-sm">
-                    <PartyAddress value={tx.fromAddress} isSelf={isOut} label={tx.fromLabel} isContract={tx.fromIsContract} />
+                    <PartyAddress value={tx.fromAddress} isSelf={isOut} label={tx.fromLabel} isContract={tx.fromIsContract} isToken={tx.fromIsToken} />
                   </td>
                   <td className="px-1 py-2.5 text-center">
                     <Badge
@@ -138,7 +140,7 @@ export function AddressTxTable({
                     {!tx.toAddress ? (
                       <span className="text-sm text-muted">Contract Creation</span>
                     ) : (
-                      <PartyAddress value={tx.toAddress} isSelf={isIn} label={tx.toLabel} isContract={tx.toIsContract} />
+                      <PartyAddress value={tx.toAddress} isSelf={isIn} label={tx.toLabel} isContract={tx.toIsContract} isToken={tx.toIsToken} />
                     )}
                   </td>
                   <td className="nums px-4 py-2.5 text-sm text-ink">

@@ -56,7 +56,7 @@ export async function watchL1Messages(options?: {
   if (!l1Provider) {
     console.warn(
       "[watchL1Messages] No L1 RPC configured — skipping. " +
-        "Set L1_RPC_URLS, L1_RPC_URL_MAINNET, and/or ALCHEMY_L1_API_KEYS " +
+        "Set L1_RPC_URLS and/or L1_RPC_URL_MAINNET " +
         "in .env to enable L1->L2 message tracking."
     );
     return;

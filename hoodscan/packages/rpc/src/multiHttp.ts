@@ -11,7 +11,7 @@ import {
  * Uses viem's built-in `fallback` so typing stays correct across viem
  * versions. Concurrent requests still fan out: each inner `http`
  * transport is independent, and `rank: true` prefers healthier/faster
- * endpoints (typical when several Alchemy keys share load).
+ * endpoints (typical when several keys share load).
  *
  * On failure of the current primary, the next URL is tried automatically.
  * Single-URL lists degrade to plain `http(url)`.
@@ -39,7 +39,7 @@ export function multiHttp(
   return fallback(
     urls.map((url) => http(url, perUrl)),
     {
-      // Prefer the lowest-latency / healthiest Alchemy key over time.
+      // Prefer the lowest-latency / healthiest endpoint over time.
       rank: true,
       // Don't stack another full retry loop on top of per-URL retries.
       retryCount: urls.length > 1 ? 1 : 0,

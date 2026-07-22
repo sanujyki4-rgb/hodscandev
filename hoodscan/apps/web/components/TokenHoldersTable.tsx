@@ -41,7 +41,7 @@ export function TokenHoldersTable({
             >
               <td className="px-4 py-2.5 text-muted">{h.rank}</td>
               <td className="px-4 py-2.5 font-mono">
-                {h.isContract ? <ContractIcon /> : null}
+                {h.isContract ? <ContractIcon address={h.address} isToken={h.isToken} /> : null}
                 <Link
                   href={`/address/${h.address}`}
                   className="text-lime hover:underline"

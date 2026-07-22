@@ -1,0 +1,8 @@
+name: QuickNode-Fallback-2
+values:
+  - key: baseUrl
+    value: 'https://black-lingering-silence.robinhood-mainnet.quiknode.pro/2309a98f9094adc9f95ba7ed782dc29abd590122/'
+  - key: apiKey
+    value: ''
+  - key: providerRole
+    value: 'fallback endpoint #2 (cadangan QuickNode) - JANGAN getLogs range besar (maks 5 blok)'

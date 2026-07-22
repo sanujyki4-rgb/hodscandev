@@ -1,7 +1,8 @@
 # Use this workspace to collaborate
 workspace:
-  id: 127f03ee-7098-4aa0-8bea-0a4634613267
+  id: 2c595b53-d901-4a78-873d-be6d020ca744
 
 localResources:
   specs:
     - ../postman/specs/hoodscan API/hoodscan API.yaml
+    - ../apps/api/openapi.yaml

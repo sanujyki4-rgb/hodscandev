@@ -8,14 +8,18 @@ const LIMIT = 25;
 /**
  * Server component for the address page's "NFT Transfers" tab. Fetches the
  * paginated ERC-721 / ERC-1155 transfers for the address and renders the
- * table plus pagination (preserving the ?tab=nft query).
+ * table plus pagination. The active tab is tracked via the URL hash (#nfttransfers).
  */
 export async function AddressNftTransfersSection({
   address,
   page,
+  pageParam = "page",
+  hashSuffix = "",
 }: {
   address: string;
   page: number;
+  pageParam?: string;
+  hashSuffix?: string;
 }) {
   const offset = (page - 1) * LIMIT;
   const data = await getNftTransfersByAddress(address, LIMIT, offset);
@@ -32,7 +36,8 @@ export async function AddressNftTransfersSection({
           limit={LIMIT}
           total={total}
           noun="NFT transfers"
-          queryPrefix="tab=nft&"
+          pageParam={pageParam}
+          hashSuffix={hashSuffix}
         />
       )}
     </div>

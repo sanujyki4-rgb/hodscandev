@@ -23,19 +23,21 @@ export interface ContractInfo {
   isContract: Map<string, boolean | null>;
   /** address (lowercased) -> verified Solidity contract name. */
   names: Map<string, string>;
+  /** address (lowercased) -> is it a token contract (present in the Token table). */
+  isToken: Map<string, boolean>;
 }
 
 /**
  * Resolve contract flags + verified names for a list of addresses. Input may
  * contain duplicates and mixed casing; keys in the returned maps are lowercased.
  */
-export async function resolveContractInfo(addresses: string[]): Promise<ContractInfo> {
+export async function resolveContractInfo(addresses: string[], allowRemote = true): Promise<ContractInfo> {
   const unique = [...new Set(addresses.map((a) => a.toLowerCase()))];
 
   // 1. Which addresses are contracts? Small pages + cached results, so a live
   //    read is fine and gives reliable contract icons.
   const contractEntries = await Promise.all(
-    unique.map(async (a) => [a, await isContractAddress(a, true)] as const)
+    unique.map(async (a) => [a, await isContractAddress(a, allowRemote)] as const)
   );
   const isContract = new Map(contractEntries);
 
@@ -51,6 +53,7 @@ export async function resolveContractInfo(addresses: string[]): Promise<Contract
   const names = new Map<string, string>(known.map((v) => [v.address, v.contractName]));
 
   // 3. Auto-resolve (and cache) the contracts we don't have a name for yet.
+  if (allowRemote) {
   const missing = contractAddrs.filter((a) => !names.has(a));
   if (missing.length > 0) {
     const resolved = await Promise.allSettled(
@@ -64,5 +67,18 @@ export async function resolveContractInfo(addresses: string[]): Promise<Contract
     });
   }
 
-  return { isContract, names };
+  }
+
+  // Which of these addresses are token contracts? One batched DB read.
+  const tokenRows =
+    unique.length > 0
+      ? await prisma.token.findMany({
+          where: { address: { in: unique } },
+          select: { address: true },
+        })
+      : [];
+  const tokenSet = new Set(tokenRows.map((t) => t.address));
+  const isToken = new Map(unique.map((a) => [a, tokenSet.has(a)] as const));
+
+  return { isContract, names, isToken };
 }

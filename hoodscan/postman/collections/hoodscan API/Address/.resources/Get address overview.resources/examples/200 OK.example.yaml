@@ -1,0 +1,25 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/address/{{address}}'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "label": "Wrapped Ether",
+        "isContract": true,
+        "isToken": true,
+        "nativeBalance": "1523000000000000000",
+        "nonce": 1,
+        "txCount": 84213,
+        "hasNftActivity": false
+      }
+order: 1000

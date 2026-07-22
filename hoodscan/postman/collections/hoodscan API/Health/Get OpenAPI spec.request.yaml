@@ -1,0 +1,27 @@
+$kind: http-request
+name: Get OpenAPI spec
+method: GET
+url: '{{baseUrl}}/openapi.json'
+order: 2000
+description: |-
+  Returns this OpenAPI 3.0 document as JSON (parsed from openapi.yaml). Not rate-limited. Useful for regenerating clients or re-importing the spec.
+examples: './.resources/Get OpenAPI spec.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('is an OpenAPI document', function () {
+        var json = pm.response.json();
+        pm.expect(json.openapi, 'openapi').to.be.a('string');
+        pm.expect(json.info, 'info').to.be.an('object');
+        pm.expect(json.paths, 'paths').to.be.an('object');
+      });

@@ -7,6 +7,9 @@ import { ContractIcon } from "@/components/ContractIcon";
 import { DetailRow } from "@/components/DetailRow";
 import { Badge } from "@/components/Badge";
 import { Chip } from "@/components/Chip";
+import { InternalTxSection } from "@/components/InternalTxSection";
+import { StateChangesSection } from "@/components/StateChangesSection";
+import { UserOperationsSection } from "@/components/UserOperationsSection";
 
 export const revalidate = 15;
 
@@ -84,7 +87,7 @@ export default async function TransactionPage({
           label="From"
           value={
             <span className="inline-flex items-center gap-1">
-              {tx.fromIsContract ? <ContractIcon /> : null}
+              {tx.fromIsContract ? <ContractIcon address={tx.fromAddress} isToken={tx.fromIsToken} /> : null}
               <Link href={`/address/${tx.fromAddress}`} title={tx.fromAddress} className="text-lime hover:underline">
                 {tx.fromLabel ?? tx.fromAddress}
               </Link>
@@ -96,7 +99,7 @@ export default async function TransactionPage({
           value={
             tx.toAddress ? (
               <span className="inline-flex items-center gap-1">
-                {tx.toIsContract ? <ContractIcon /> : null}
+                {tx.toIsContract ? <ContractIcon address={tx.toAddress} isToken={tx.toIsToken} /> : null}
                 <Link href={`/address/${tx.toAddress}`} title={tx.toAddress} className="text-lime hover:underline">
                   {tx.toLabel ?? tx.toAddress}
                 </Link>
@@ -200,6 +203,12 @@ export default async function TransactionPage({
           </div>
         </div>
       )}
+
+      <InternalTxSection hash={tx.hash} />
+
+      <StateChangesSection hash={tx.hash} />
+
+      <UserOperationsSection hash={tx.hash} />
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted">

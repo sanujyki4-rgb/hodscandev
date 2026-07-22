@@ -1,0 +1,34 @@
+$kind: http-request
+name: Get token metadata status
+method: GET
+url: '{{baseUrl}}/tokens/metadata/status'
+order: 6000
+description: |-
+  Token metadata coverage metrics and resolver health. Returns totalTokens, withMetadata, pendingBacklog, coveragePct, and a resolver object (reporting, backoffLevel, degraded, lastUpdatedAt) describing the background metadata resolver.
+examples: './.resources/Get token metadata status.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('coverage metrics present', function () {
+        var json = pm.response.json();
+        pm.expect(json.totalTokens, 'totalTokens').to.be.a('number');
+        pm.expect(json.withMetadata, 'withMetadata').to.be.a('number');
+        pm.expect(json.pendingBacklog, 'pendingBacklog').to.be.a('number');
+        pm.expect(json.coveragePct, 'coveragePct').to.be.a('number');
+      });
+      pm.test('resolver health present', function () {
+        var r = pm.response.json().resolver;
+        pm.expect(r, 'resolver').to.be.an('object');
+        pm.expect(r.reporting, 'reporting').to.be.a('boolean');
+        pm.expect(r.degraded, 'degraded').to.be.a('boolean');
+      });

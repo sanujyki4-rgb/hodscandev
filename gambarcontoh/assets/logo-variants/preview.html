@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hoodscan logo — perbandingan warna</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      background: #f4f4f5;
+      color: #18181b;
+      padding: 32px 20px 48px;
+    }
+    h1 { font-size: 1.25rem; margin: 0 0 8px; }
+    p.sub { margin: 0 0 28px; color: #52525b; font-size: 0.95rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 20px;
+      max-width: 980px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e4e7;
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+    }
+    .card.dark {
+      background: #18181b;
+      border-color: #27272a;
+      color: #fafafa;
+    }
+    .card.dark .meta { color: #a1a1aa; }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #e4e4e7;
+      color: #3f3f46;
+      margin-bottom: 12px;
+    }
+    .card.dark .badge { background: #3f3f46; color: #e4e4e7; }
+    img, object, svg {
+      width: 128px;
+      height: 128px;
+      display: block;
+      margin: 0 auto 14px;
+    }
+    .title { font-weight: 600; font-size: 0.95rem; margin-bottom: 6px; }
+    .meta { font-size: 0.8rem; color: #71717a; line-height: 1.4; }
+    .row-label {
+      max-width: 980px;
+      margin: 28px 0 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #71717a;
+    }
+  </style>
+</head>
+<body>
+  <h1>Hoodscan icon — coba warna satu per satu</h1>
+  <p class="sub">
+    File mandiri di <code>assets/logo-variants/</code>. Belum diintegrasikan ke app.
+    Buka file HTML ini di browser, lalu pilih V1–V4.
+  </p>
+
+  <div class="row-label">Di atas latar terang (seperti halaman Etherscan)</div>
+  <div class="grid">
+    <div class="card">
+      <div class="badge">V1</div>
+      <img src="v1-putih-di-abu-sedang.svg" alt="V1" width="128" height="128" />
+      <div class="title">Putih di abu sedang</div>
+      <div class="meta">Icon #FFF · circle #8A8A8A<br/>Feather putih, bungkus abu medium</div>
+    </div>
+    <div class="card">
+      <div class="badge">V2</div>
+      <img src="v2-putih-di-abu-gelap.svg" alt="V2" width="128" height="128" />
+      <div class="title">Putih di abu gelap</div>
+      <div class="meta">Icon #FFF · circle #3A3A3A<br/>Kontras tinggi, mirip brand putih</div>
+    </div>
+    <div class="card">
+      <div class="badge">V3</div>
+      <img src="v3-putih-dominan.svg" alt="V3" width="128" height="128" />
+      <div class="title">Putih dominan (dibalik)</div>
+      <div class="meta">Circle #FFF + ring abu · icon #2D2D2D<br/>Putih banyak, hitam sedikit</div>
+    </div>
+    <div class="card">
+      <div class="badge">V4</div>
+      <img src="v4-putih-di-abu-etherscan.svg" alt="V4" width="128" height="128" />
+      <div class="title">Putih di abu Etherscan</div>
+      <div class="meta">Icon #FFF · circle #E8E8E8<br/>Sama abu ETH; kontras lebih rendah</div>
+    </div>
+  </div>
+
+  <div class="row-label">Di atas latar gelap (cek kontras malam / dark UI)</div>
+  <div class="grid">
+    <div class="card dark">
+      <div class="badge">V1</div>
+      <img src="v1-putih-di-abu-sedang.svg" alt="V1 dark" width="128" height="128" />
+      <div class="title">V1 di dark</div>
+      <div class="meta">Cek apakah badge masih kebaca</div>
+    </div>
+    <div class="card dark">
+      <div class="badge">V2</div>
+      <img src="v2-putih-di-abu-gelap.svg" alt="V2 dark" width="128" height="128" />
+      <div class="title">V2 di dark</div>
+      <div class="meta">Cek apakah badge masih kebaca</div>
+    </div>
+    <div class="card dark">
+      <div class="badge">V3</div>
+      <img src="v3-putih-dominan.svg" alt="V3 dark" width="128" height="128" />
+      <div class="title">V3 di dark</div>
+      <div class="meta">Putih-dominan di dark UI</div>
+    </div>
+    <div class="card dark">
+      <div class="badge">V4</div>
+      <img src="v4-putih-di-abu-etherscan.svg" alt="V4 dark" width="128" height="128" />
+      <div class="title">V4 di dark</div>
+      <div class="meta">Abu muda di dark UI</div>
+    </div>
+  </div>
+</body>
+</html>

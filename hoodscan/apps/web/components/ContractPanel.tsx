@@ -5,6 +5,8 @@ import { ReadContractSection } from "@/components/ReadContractSection";
 import { VerifyContractForm } from "@/components/VerifyContractForm";
 import { WriteContractSection } from "@/components/WriteContractSection";
 import { getVerification, type VerificationStatus } from "@/lib/api";
+import { Callout } from "@/components/Callout";
+import { Loading } from "@/components/Loading";
 
 type SubTab = "code" | "read" | "write";
 
@@ -124,15 +126,15 @@ function CodeTab({
   return (
     <div className="flex flex-col gap-4">
       {loading ? (
-        <p className="px-1 py-6 text-sm text-muted">Loading verification status…</p>
+        <Loading label="Loading verification status…" />
       ) : verified ? (
         <VerifiedSource verification={verification!} />
       ) : (
         <>
-          <div className="rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3 text-sm text-muted">
+          <Callout tone="warning">
             This contract&apos;s source isn&apos;t verified yet (not found on the explorer). Verify
             below to publish the source, unlock the real ABI, and enable full Read / Write Contract.
-          </div>
+          </Callout>
           <VerifyContractForm address={address} onVerified={onVerified} />
         </>
       )}
@@ -185,13 +187,13 @@ function VerifiedSource({ verification }: { verification: VerificationStatus }) 
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xl border border-lime/30 bg-lime/[0.06] px-4 py-3 text-sm text-ink">
+      <Callout tone="positive" className="text-sm text-ink">
         <span className="font-semibold text-lime">✓ Contract Source Code Verified</span> — matched
         against the on-chain bytecode.
-      </div>
+      </Callout>
 
       {verification.proxyType && (
-        <div className="rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3 text-sm text-ink">
+        <Callout tone="warning" className="text-sm text-ink">
           <span className="font-semibold text-warning">Proxy contract</span>
           {verification.proxyType ? ` (${verification.proxyType})` : ""}. Read &amp; Write operate on
           the implementation ABI.
@@ -200,7 +202,7 @@ function VerifiedSource({ verification }: { verification: VerificationStatus }) 
               {" "}
               Implementation:{" "}
               <a
-                href={`/address/${impl.address}?tab=contract`}
+                href={`/address/${impl.address}#code`}
                 className="break-all font-mono text-lime hover:underline"
               >
                 {impl.address}
@@ -208,7 +210,7 @@ function VerifiedSource({ verification }: { verification: VerificationStatus }) 
               {impl.contractName ? ` (${impl.contractName})` : ""}.
             </>
           )}
-        </div>
+        </Callout>
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

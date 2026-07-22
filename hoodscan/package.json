@@ -12,7 +12,15 @@
     "lint": "turbo run lint",
     "db:generate": "dotenv -e .env -- pnpm --filter @hoodscan/database prisma:generate",
     "db:migrate": "dotenv -e .env -- pnpm --filter @hoodscan/database prisma:migrate",
-    "db:studio": "dotenv -e .env -- pnpm --filter @hoodscan/database exec prisma studio"
+    "db:studio": "dotenv -e .env -- pnpm --filter @hoodscan/database exec prisma studio",
+    "backfill:gapless": "pnpm --filter @hoodscan/indexer backfill:gapless",
+    "backfill:internal": "pnpm --filter @hoodscan/indexer backfill:internal",
+    "backfill:logs": "pnpm --filter @hoodscan/indexer backfill:logs",
+    "backfill:retry": "pnpm --filter @hoodscan/indexer backfill:retry",
+    "backfill:recompute": "pnpm --filter @hoodscan/indexer backfill:recompute",
+    "backfill:tokenlogos": "pnpm --filter @hoodscan/indexer backfill:tokenlogos",
+    "backfill:token-daily": "pnpm --filter @hoodscan/indexer backfill:token-daily",
+    "openapi:lint": "pnpm --filter @hoodscan/api openapi:lint"
   },
   "devDependencies": {
     "turbo": "^2.0.0",

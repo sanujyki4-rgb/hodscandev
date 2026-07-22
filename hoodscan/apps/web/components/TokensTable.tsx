@@ -1,7 +1,9 @@
 import Link from "next/link";
 import type { TokenListItem } from "@/lib/api";
 import { shortAddr } from "@/lib/format";
+import { tokenLogoSrc } from "@/lib/api";
 import { EmptyState } from "./EmptyState";
+import { TokenLogo } from "./TokenLogo";
 
 /**
  * ERC-20 token list — ranked by transfer count. Each row links to the
@@ -34,8 +36,9 @@ export function TokensTable({ tokens }: { tokens: TokenListItem[] }) {
               <td className="px-4 py-2.5">
                 <Link
                   href={`/token/${t.tokenAddress}`}
-                  className="font-medium text-lime hover:underline"
+                  className="flex items-center gap-2 font-medium text-lime hover:underline"
                 >
+                  <TokenLogo address={t.tokenAddress} symbol={t.symbol} logoUrl={tokenLogoSrc(t.logo)} size={20} />
                   {t.name ?? "Unknown Token"}
                 </Link>
               </td>

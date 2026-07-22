@@ -8,14 +8,18 @@ const LIMIT = 25;
 /**
  * Server component for the address page's "Token Transfers (ERC-20)"
  * tab. Fetches the paginated token transfers for the address and renders
- * the table plus pagination (preserving the ?tab=token-erc20 query).
+ * the table plus pagination. The active tab is tracked via the URL hash (#tokentxns).
  */
 export async function AddressTokenTransfersSection({
   address,
   page,
+  pageParam = "page",
+  hashSuffix = "",
 }: {
   address: string;
   page: number;
+  pageParam?: string;
+  hashSuffix?: string;
 }) {
   const offset = (page - 1) * LIMIT;
   const data = await getTokenTransfersByAddress(address, LIMIT, offset);
@@ -32,7 +36,8 @@ export async function AddressTokenTransfersSection({
           limit={LIMIT}
           total={total}
           noun="token transfers"
-          queryPrefix="tab=token-erc20&"
+          pageParam={pageParam}
+          hashSuffix={hashSuffix}
         />
       )}
     </div>

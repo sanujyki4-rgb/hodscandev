@@ -8,53 +8,53 @@ datasource db {
 }
 
 model Block {
-  number          BigInt   @id
-  hash            String   @unique
-  parentHash      String
-  timestamp       DateTime
-  gasUsed         BigInt
-  gasLimit        BigInt
-  baseFeePerGas   BigInt
-  l1BlockNumber   BigInt
-  sendCount       BigInt
-  sendRoot        String
-  size            Int
-  txCount         Int
-  isFinalized     Boolean  @default(false)
+  number        BigInt   @id
+  hash          String   @unique
+  parentHash    String
+  timestamp     DateTime
+  gasUsed       BigInt
+  gasLimit      BigInt
+  baseFeePerGas BigInt
+  l1BlockNumber BigInt
+  sendCount     BigInt
+  sendRoot      String
+  size          Int
+  txCount       Int
+  isFinalized   Boolean  @default(false)
 
-  transactions    Transaction[]
+  transactions Transaction[]
 
   @@index([timestamp])
 }
 
 model Transaction {
-  hash                  String   @id
-  blockNumber           BigInt
-  block                 Block    @relation(fields: [blockNumber], references: [number])
-  transactionIndex      Int
+  hash             String @id
+  blockNumber      BigInt
+  block            Block  @relation(fields: [blockNumber], references: [number])
+  transactionIndex Int
 
-  fromAddress           String
-  toAddress              String?  // nullable: contract deployment
-  nonce                 BigInt
-  value                 Decimal  @db.Decimal(38, 0) // wei, can be very large
-  gas                   BigInt
-  gasPrice              Decimal? @db.Decimal(38, 0)
-  maxFeePerGas          Decimal? @db.Decimal(38, 0)
-  maxPriorityFeePerGas  Decimal? @db.Decimal(38, 0)
+  fromAddress          String
+  toAddress            String? // nullable: contract deployment
+  nonce                BigInt
+  value                Decimal  @db.Decimal(38, 0) // wei, can be very large
+  gas                  BigInt
+  gasPrice             Decimal? @db.Decimal(38, 0)
+  maxFeePerGas         Decimal? @db.Decimal(38, 0)
+  maxPriorityFeePerGas Decimal? @db.Decimal(38, 0)
 
-  input                 String   // raw calldata, can be long
-  functionSelector      String?  // first 4 bytes of input, for fast filtering
-  txType                String   // '0x0', '0x2', '0x69' (ArbitrumSubmitRetryableTx = real L1->L2 message), '0x6a' (ArbitrumInternalTx = ArbOS per-block housekeeping, NOT an L1->L2 message), etc.
-  requestId             String?  // only set for txType '0x69' — matched against L1ToL2Message.requestId
+  input            String // raw calldata, can be long
+  functionSelector String? // first 4 bytes of input, for fast filtering
+  txType           String // '0x0', '0x2', '0x69' (ArbitrumSubmitRetryableTx = real L1->L2 message), '0x6a' (ArbitrumInternalTx = ArbOS per-block housekeeping, NOT an L1->L2 message), etc.
+  requestId        String? // only set for txType '0x69' — matched against L1ToL2Message.requestId
 
   // Receipt-derived fields — NOT available from the block/tx object
   // itself, require a separate eth_getBlockReceipts (or per-tx
   // eth_getTransactionReceipt) call. Nullable because older indexed
   // rows (before this field existed) won't have it backfilled.
-  gasUsed               BigInt?  // actual gas consumed, from the receipt
-  effectiveGasPrice     Decimal? @db.Decimal(38, 0) // actual wei/gas paid, from the receipt (accounts for EIP-1559 base fee + tip)
+  gasUsed           BigInt? // actual gas consumed, from the receipt
+  effectiveGasPrice Decimal? @db.Decimal(38, 0) // actual wei/gas paid, from the receipt (accounts for EIP-1559 base fee + tip)
 
-  l1ToL2Message         L1ToL2Message?
+  l1ToL2Message L1ToL2Message?
 
   @@index([blockNumber])
   // Compound index matching the list ORDER BY (blockNumber desc,
@@ -64,6 +64,8 @@ model Transaction {
   @@index([toAddress])
   @@index([functionSelector])
   @@index([requestId])
+  // Partial indexes tx_other_from_idx / tx_other_to_idx (non-standard txType only)
+  // are maintained via raw SQL migration 20260721170000_add_other_tx_partial_indexes.
 }
 
 // Tracks Robinhood Chain's L1->L2 retryable-ticket messages, indexed
@@ -74,16 +76,16 @@ model Transaction {
 // are filled in once the matching txType "0x69" transaction is seen on
 // L2 (matched via `requestId`, computed by @arbitrum/sdk from the L1 tx).
 model L1ToL2Message {
-  id                 BigInt   @id            // messageIndex from the L1 Bridge contract's MessageDelivered event
-  requestId          String   @unique        // retryable ticket id, computed by @arbitrum/sdk (L1TransactionReceipt.getL1ToL2Messages) from the real L1 tx data — matched against Transaction.requestId
-  originTxHash       String                  // the real L1 (Ethereum) transaction hash — this is what the frontend shows as "L1 Tx"
-  originBlockNumber  BigInt
-  originTimestamp    DateTime
-  originAddress      String                  // L1 sender (msg.sender on the Bridge/Inbox call)
+  id                BigInt   @id // messageIndex from the L1 Bridge contract's MessageDelivered event
+  requestId         String   @unique // retryable ticket id, computed by @arbitrum/sdk (L1TransactionReceipt.getL1ToL2Messages) from the real L1 tx data — matched against Transaction.requestId
+  originTxHash      String // the real L1 (Ethereum) transaction hash — this is what the frontend shows as "L1 Tx"
+  originBlockNumber BigInt
+  originTimestamp   DateTime
+  originAddress     String // L1 sender (msg.sender on the Bridge/Inbox call)
 
-  l2TxHash           String?  @unique
-  transaction        Transaction? @relation(fields: [l2TxHash], references: [hash])
-  status             String   @default("initiated") // initiated | relayed
+  l2TxHash    String?      @unique
+  transaction Transaction? @relation(fields: [l2TxHash], references: [hash])
+  status      String       @default("initiated") // initiated | relayed
 
   @@index([originBlockNumber])
 }
@@ -96,15 +98,15 @@ model L1ToL2Message {
 // no extra joins. amount is the raw uint256 base-unit value; the API
 // scales it by the token's on-chain decimals (Layer 1 tokenResolver).
 model TokenTransfer {
-  id            BigInt   @id @default(autoincrement())
-  txHash        String   // parent transaction hash (Transaction.hash)
-  logIndex      Int      // log position within the receipt
-  blockNumber   BigInt
-  timestamp     DateTime // denormalized from the parent block
-  tokenAddress  String   // the ERC-20 contract that emitted the event
-  fromAddress   String   // Transfer `from` (indexed topic 1)
-  toAddress     String   // Transfer `to` (indexed topic 2)
-  amount        Decimal  @db.Decimal(78, 0) // raw uint256 value (base units)
+  id           BigInt   @id @default(autoincrement())
+  txHash       String // parent transaction hash (Transaction.hash)
+  logIndex     Int // log position within the receipt
+  blockNumber  BigInt
+  timestamp    DateTime // denormalized from the parent block
+  tokenAddress String // the ERC-20 contract that emitted the event
+  fromAddress  String // Transfer `from` (indexed topic 1)
+  toAddress    String // Transfer `to` (indexed topic 2)
+  amount       Decimal  @db.Decimal(78, 0) // raw uint256 value (base units)
 
   // A given (tx, log) pair is unique — makes indexer upserts idempotent
   // so re-processing a block never double-inserts.
@@ -113,6 +115,27 @@ model TokenTransfer {
   @@index([fromAddress])
   @@index([toAddress])
   @@index([blockNumber])
+  @@index([tokenAddress, blockNumber, logIndex], map: "tt_token_block_log_idx")
+  @@index([fromAddress, blockNumber, logIndex], map: "tt_from_block_log_idx")
+  @@index([toAddress, blockNumber, logIndex], map: "tt_to_block_log_idx")
+  @@index([tokenAddress, timestamp], map: "tt_token_ts_idx")
+}
+
+// Pre-aggregated per-day analytics for a single ERC-20 token, maintained
+// incrementally by the indexer (tokenTransferService.saveTokenTransfers)
+// and (re)built in bulk by the `backfill:token-daily` job. Reading this
+// rollup turns GET /tokens/:address/daily from a COUNT(DISTINCT) scan over
+// millions of TokenTransfer rows into an O(days) primary-key lookup. Only
+// days that actually had transfers get a row.
+model TokenDailyStat {
+  tokenAddress String
+  day          DateTime
+  transfers    Int
+  senders      Int
+  receivers    Int
+  updatedAt    DateTime @updatedAt
+
+  @@id([tokenAddress, day])
 }
 
 // One NFT transfer event decoded from a transaction receipt's logs by
@@ -122,18 +145,18 @@ model TokenTransfer {
 // address page lists them by participant (from/to). tokenId + amount are
 // kept as decimal strings to safely hold uint256 values.
 model NftTransfer {
-  id            BigInt   @id @default(autoincrement())
-  txHash        String   // parent transaction hash (Transaction.hash)
-  logIndex      Int      // log position within the receipt
-  batchIndex    Int      @default(0) // index within an ERC-1155 TransferBatch (0 otherwise)
-  blockNumber   BigInt
-  timestamp     DateTime // denormalized from the parent block
-  tokenAddress  String   // the NFT contract that emitted the event
-  fromAddress   String   // Transfer `from`
-  toAddress     String   // Transfer `to`
-  tokenId       String   // uint256 token id, as a decimal string
-  amount        String   @default("1") // "1" for ERC-721; the value for ERC-1155
-  standard      String   // "erc721" | "erc1155"
+  id           BigInt   @id @default(autoincrement())
+  txHash       String // parent transaction hash (Transaction.hash)
+  logIndex     Int // log position within the receipt
+  batchIndex   Int      @default(0) // index within an ERC-1155 TransferBatch (0 otherwise)
+  blockNumber  BigInt
+  timestamp    DateTime // denormalized from the parent block
+  tokenAddress String // the NFT contract that emitted the event
+  fromAddress  String // Transfer `from`
+  toAddress    String // Transfer `to`
+  tokenId      String // uint256 token id, as a decimal string
+  amount       String   @default("1") // "1" for ERC-721; the value for ERC-1155
+  standard     String // "erc721" | "erc1155"
 
   // (tx, log, batch) is unique — makes indexer upserts idempotent so
   // re-processing a block never double-inserts.
@@ -148,25 +171,116 @@ model NftTransfer {
 // backfill stores the last block it scanned here). Lets jobs pick up
 // where they left off across indexer restarts instead of rescanning.
 model IndexerCursor {
-  name       String   @id
-  value      BigInt
-  updatedAt  DateTime @updatedAt
+  name      String   @id
+  value     BigInt
+  updatedAt DateTime @updatedAt
 }
 
 // A contract whose Solidity source has been verified against its
 // on-chain runtime bytecode (solc compile + metadata-stripped match).
 // Once verified we have the real ABI, powering full Read/Write Contract.
 model VerifiedContract {
-  address              String   @id  // lowercased 0x contract address
-  contractName         String
-  compilerVersion      String        // e.g. v0.8.24+commit.e11b9ed9
-  optimizationEnabled  Boolean  @default(false)
-  optimizationRuns     Int      @default(200)
-  evmVersion           String?
-  sourceCode           String        // full (flattened) Solidity source
-  abi                  String        // JSON string of the ABI array
-  constructorArguments String?       // hex, optional
-  proxyType            String?       // e.g. eip1967 / transparent (null = not a proxy)
-  implementationAddress String?      // lowercased impl address for proxies
-  verifiedAt           DateTime @default(now())
+  address               String   @id // lowercased 0x contract address
+  contractName          String
+  compilerVersion       String // e.g. v0.8.24+commit.e11b9ed9
+  optimizationEnabled   Boolean  @default(false)
+  optimizationRuns      Int      @default(200)
+  evmVersion            String?
+  sourceCode            String // full (flattened) Solidity source
+  abi                   String // JSON string of the ABI array
+  constructorArguments  String? // hex, optional
+  proxyType             String? // e.g. eip1967 / transparent (null = not a proxy)
+  implementationAddress String? // lowercased impl address for proxies
+  verifiedAt            DateTime @default(now())
+}
+
+// Persisted token metadata (ERC-20 / ERC-721 / ERC-1155), resolved once by
+// the indexer instead of on every API request. Powers fast token list /
+// detail pages without a live on-chain call each time.
+model Token {
+  address        String   @id // lowercased 0x contract address
+  name           String?
+  symbol         String?
+  logoUrl        String? // token icon URL origin (Blockscout); "" = checked/none, null = unchecked
+  decimals       Int? // null for NFTs (ERC-721/1155)
+  totalSupply    Decimal? @db.Decimal(78, 0) // raw base units
+  tokenType      String // "erc20" | "erc721" | "erc1155"
+  holderCount    Int      @default(0)
+  transferCount  Int      @default(0)
+  firstSeenBlock BigInt?
+  updatedAt      DateTime @updatedAt
+
+  @@index([tokenType])
+  @@index([symbol])
+  @@index([holderCount])
+}
+
+// Current balance of a token for one owner address. Maintained by the
+// indexer as it processes Transfer events (from -= amount, to += amount).
+// Enables fast "token holders" and "tokens held by address" pages without
+// scanning every transfer at read time.
+model TokenBalance {
+  id           BigInt  @id @default(autoincrement())
+  tokenAddress String // ERC-20/1155 contract
+  ownerAddress String
+  balance      Decimal @default(0) @db.Decimal(78, 0) // raw base units
+  updatedBlock BigInt
+
+  // one row per (token, owner) -> idempotent upserts
+  @@unique([tokenAddress, ownerAddress])
+  @@index([ownerAddress]) // tokens held by an address
+  @@index([tokenAddress, balance]) // top holders of a token
+}
+
+// Internal transactions (value transfers & sub-calls produced during a tx's
+// execution), decoded from a debug_trace* callTracer result. Big explorers
+// show these on the tx page ("Internal Txns"). Persisted so they survive
+// beyond the on-demand trace cache.
+model InternalTransaction {
+  id           BigInt   @id @default(autoincrement())
+  txHash       String // parent transaction (Transaction.hash)
+  blockNumber  BigInt
+  timestamp    DateTime // denormalized from the parent block
+  traceAddress String // call-tree path, e.g. "0", "0_1", "0_1_2"
+  callType     String // call | delegatecall | staticcall | create | create2 | selfdestruct
+  fromAddress  String
+  toAddress    String? // null for contract creation
+  value        Decimal  @default(0) @db.Decimal(38, 0) // wei
+  gas          BigInt?
+  gasUsed      BigInt?
+  input        String?
+  output       String?
+  error        String? // revert / out-of-gas reason if the call failed
+
+  // (tx, trace path) unique -> idempotent re-processing
+  @@unique([txHash, traceAddress])
+  @@index([txHash])
+  @@index([blockNumber])
+  @@index([fromAddress])
+  @@index([toAddress])
+}
+
+// Every event log emitted during a transaction, decoded from the tx receipt
+// (RawReceipt.logs) by the indexer — no extra RPC beyond the
+// eth_getBlockReceipts the indexer already makes per block. Powers the
+// address/contract "Events" tab. topic0 is the event-signature hash; topic1..3
+// are the indexed params (there can be 0-3 of them).
+model Log {
+  id          BigInt   @id @default(autoincrement())
+  txHash      String // parent transaction hash (Transaction.hash)
+  logIndex    Int // log position within the block receipts
+  blockNumber BigInt
+  timestamp   DateTime // denormalized from the parent block
+  address     String // the contract that emitted the event
+  topic0      String? // event signature hash (topics[0]); null for anonymous events
+  topic1      String?
+  topic2      String?
+  topic3      String?
+  data        String // ABI-encoded non-indexed args (hex)
+
+  // (tx, log) is unique -> idempotent upserts, re-processing never doubles.
+  @@unique([txHash, logIndex])
+  @@index([address])
+  @@index([blockNumber])
+  @@index([topic0])
 }

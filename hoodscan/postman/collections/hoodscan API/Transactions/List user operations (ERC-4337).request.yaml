@@ -1,0 +1,35 @@
+$kind: http-request
+name: List user operations (ERC-4337)
+method: GET
+url: '{{baseUrl}}/transactions/{{txHash}}/user-operations'
+order: 7000
+description: |-
+  ERC-4337 account-abstraction user operations contained in a transaction, decoded from EntryPoint UserOperationEvent logs. Returns { txHash, total, userOperations[] }. Each user op includes userOpHash, sender, paymaster (nullable), string nonce/actualGasCost/actualGasUsed, success, and the entryPoint address/version.
+examples: './.resources/List user operations (ERC-4337).resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('user-operations envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.txHash, 'txHash').to.be.a('string');
+        pm.expect(json.total, 'total').to.be.a('number');
+        pm.expect(json.userOperations, 'userOperations').to.be.an('array');
+      });
+      pm.test('user operation items are well-formed', function () {
+        var arr = pm.response.json().userOperations;
+        if (Array.isArray(arr) && arr.length > 0) {
+          pm.expect(arr[0].userOpHash, 'userOpHash').to.be.a('string');
+          pm.expect(arr[0].sender, 'sender').to.be.a('string');
+          pm.expect(arr[0].success, 'success').to.be.a('boolean');
+        }
+      });

@@ -10,6 +10,8 @@ import {
   type AbiFunction,
 } from "viem";
 import type { VerificationStatus } from "@/lib/api";
+import { Callout } from "./Callout";
+import { Loading } from "./Loading";
 
 const CHAIN_ID = 4663;
 const CHAIN_ID_HEX = "0x1237"; // 4663
@@ -210,15 +212,15 @@ export function WriteContractSection({
   }
 
   if (loading) {
-    return <p className="px-1 py-6 text-sm text-muted">Loading verification status…</p>;
+    return <Loading label="Loading verification status…" />;
   }
 
   if (!verification?.verified) {
     return (
-      <div className="rounded-xl border border-warning/30 bg-warning/[0.06] px-4 py-3 text-sm text-muted">
+      <Callout tone="warning">
         Write Contract needs the contract&apos;s real ABI. Verify the source in the{" "}
         <span className="font-semibold text-ink">Code</span> tab first to enable writing.
-      </div>
+      </Callout>
     );
   }
 

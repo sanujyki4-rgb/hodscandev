@@ -50,7 +50,7 @@ export async function listNftTransfersByAddress(req: Request, res: Response) {
   const metaByToken = new Map(metaEntries);
 
   // Contract icons + verified names for From/To parties (shared helper).
-  const { isContract: isContractByAddr, names: nameByAddr } =
+  const { isContract: isContractByAddr, isToken: isTokenByAddr, names: nameByAddr } =
     await resolveContractInfo(transfers.flatMap((t) => [t.fromAddress, t.toAddress]));
 
   const rows = transfers.map((t) => {
@@ -78,6 +78,8 @@ export async function listNftTransfersByAddress(req: Request, res: Response) {
       fromLabel: getAddressLabel(t.fromAddress) ?? nameByAddr.get(t.fromAddress) ?? null,
       toLabel: getAddressLabel(t.toAddress) ?? nameByAddr.get(t.toAddress) ?? null,
       fromIsContract: isContractByAddr.get(t.fromAddress) ?? null,
+      fromIsToken: isTokenByAddr.get(t.fromAddress) ?? false,
+      toIsToken: isTokenByAddr.get(t.toAddress) ?? false,
       toIsContract: isContractByAddr.get(t.toAddress) ?? null,
       tokenIsContract: true,
     };

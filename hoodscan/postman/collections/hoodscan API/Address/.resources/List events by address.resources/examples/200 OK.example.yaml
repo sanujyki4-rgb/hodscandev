@@ -1,0 +1,43 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/address/{{address}}/events?limit=20&offset=0'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+        "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "events": [
+          {
+            "txHash": "0x88df016429689c079f3b2f6ad39fa052532c56795b733da78a91ebe6a713944b",
+            "logIndex": 3,
+            "blockNumber": "14571309",
+            "timestamp": "1699999999",
+            "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "topic0": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "eventName": "Transfer",
+            "topics": [
+              "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+              "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "0x0000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad"
+            ],
+            "data": "0x0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+            "decoded": {
+              "from": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "to": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+              "value": "1000000000000000000"
+            }
+          }
+        ]
+      }
+order: 1000

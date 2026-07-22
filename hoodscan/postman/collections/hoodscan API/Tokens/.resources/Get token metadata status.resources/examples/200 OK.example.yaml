@@ -1,0 +1,27 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/tokens/metadata/status'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "totalTokens": 1842,
+        "withMetadata": 1731,
+        "pendingBacklog": 111,
+        "coveragePct": 93.97,
+        "resolver": {
+          "reporting": true,
+          "backoffLevel": 0,
+          "degraded": false,
+          "lastUpdatedAt": "2026-07-21T13:00:00.000Z"
+        }
+      }
+order: 1000

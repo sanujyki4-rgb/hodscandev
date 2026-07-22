@@ -7,6 +7,7 @@ import transactionsRouter from "./routes/transactions.route";
 import addressRouter from "./routes/address.route";
 import tokensRouter from "./routes/tokens.route";
 import statsRouter from "./routes/stats.route";
+import docsRouter from "./routes/docs.route";
 import { errorHandler } from "./middlewares/errorHandler";
 
 const app = express();
@@ -34,6 +35,9 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+// API docs + machine-readable spec (registered before the limiter).
+app.use("/", docsRouter);
+
 app.use(limiter);
 
 app.use("/blocks", blocksRouter);

@@ -6,20 +6,18 @@ import { ADDRESS_RE } from "../utils/address";
 const ALLOWED_DAYS = [7, 14, 30, 90] as const;
 const DEFAULT_DAYS = 30;
 
-interface DailyRow {
-  day: Date;
-  transfers: number;
-  senders: number;
-  receivers: number;
-}
-
 /**
  * GET /tokens/:address/daily?days=30
  *
- * Per-day analytics for a single ERC-20 token, derived from the
- * TokenTransfer table (transfer count + unique senders/receivers per
- * day). Powers the token page's "Analytics" tab. Uses the
- * TokenTransfer(tokenAddress) / (blockNumber) indexes; no migration.
+ * Per-day analytics for a single ERC-20 token (transfer count + unique
+ * senders/receivers per day). Powers the token page's "Analytics" tab.
+ *
+ * Reads the pre-aggregated TokenDailyStat rollup (maintained by the
+ * indexer + the `backfill:token-daily` job) instead of aggregating the raw
+ * TokenTransfer table at request time. This turns a COUNT(DISTINCT) scan
+ * over millions of rows into an O(days) primary-key lookup. The rollup
+ * only stores days that actually had transfers, so `points` contains only
+ * active days — identical to the previous GROUP BY behaviour.
  */
 export async function getTokenDaily(req: Request, res: Response) {
   if (!ADDRESS_RE.test(req.params.address)) {
@@ -32,21 +30,20 @@ export async function getTokenDaily(req: Request, res: Response) {
     ? requested
     : DEFAULT_DAYS;
 
-  const rows = await prisma.$queryRaw<DailyRow[]>`
-    SELECT
-      date_trunc('day', "timestamp")            AS day,
-      COUNT(*)::int                             AS transfers,
-      COUNT(DISTINCT "fromAddress")::int        AS senders,
-      COUNT(DISTINCT "toAddress")::int          AS receivers
-    FROM "TokenTransfer"
-    WHERE "tokenAddress" = ${address}
-      AND "timestamp" >= date_trunc('day', NOW()) - (${days}::int - 1) * INTERVAL '1 day'
-    GROUP BY day
-    ORDER BY day ASC
-  `;
+  // UTC midnight of (today - (days - 1)) — inclusive lower bound of the window.
+  const now = new Date();
+  const windowStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  windowStart.setUTCDate(windowStart.getUTCDate() - (days - 1));
+
+  const rows = await prisma.tokenDailyStat.findMany({
+    where: { tokenAddress: address, day: { gte: windowStart } },
+    orderBy: { day: "asc" },
+  });
 
   const points = rows.map((r) => ({
-    date: new Date(r.day).toISOString().slice(0, 10),
+    date: r.day.toISOString().slice(0, 10),
     transfers: r.transfers,
     senders: r.senders,
     receivers: r.receivers,

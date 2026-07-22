@@ -13,21 +13,13 @@ description: |-
 
   The `X-API-KEY` header is only used by Uniblock; other providers ignore it harmlessly.
 variables:
-  - key: baseUrl
-    value: 'https://api.uniblock.dev/uni/v1/json-rpc?chainId=4663'
-  - key: apiKey
-    value: d2z-g0kLz31qctZKcNfUHs2X4eds7WqsKYrmY4ViDZ4
-  - key: txHash
-    value: '0x737e3e07ac1e61fc0a15093bc727a9b2a936341a4c17769c42c8a71a3fa180ca'
-  - key: blockNumber
-    value: '0xd3d900'
-  - key: tokenAddress
-    value: '0x0241b9fb25a0a7670b1c8dc944d68d2361eb2b71'
-  - key: address
-    value: '0xcc18c7fc7bec0168d2022bd92b5fb843d4cbb026'
-  - key: blockHash
-    value: '0x7e431a4011321bd44e24d4431118da9a5a148b2c6a3ca86fe81f24373a4a422f'
-  - key: holderAddress
-    value: '0xfc78968f91200892f42125bf71da6c97fd0ae4a3'
-  - key: filterId
-    value: '0xa8edbbd1e020355da2cd93613be18e21'
+  baseUrl: https://api.uniblock.dev/uni/v1/json-rpc?chainId=4663
+  apiKey: d2z-g0kLz31qctZKcNfUHs2X4eds7WqsKYrmY4ViDZ4
+  txHash: "0x737e3e07ac1e61fc0a15093bc727a9b2a936341a4c17769c42c8a71a3fa180ca"
+  blockNumber: "0xd3d900"
+  tokenAddress: "0x0241b9fb25a0a7670b1c8dc944d68d2361eb2b71"
+  address: "0xcc18c7fc7bec0168d2022bd92b5fb843d4cbb026"
+  blockHash: "0x7e431a4011321bd44e24d4431118da9a5a148b2c6a3ca86fe81f24373a4a422f"
+  holderAddress: "0xfc78968f91200892f42125bf71da6c97fd0ae4a3"
+  filterId: "0xa8edbbd1e020355da2cd93613be18e21"
+  blockFilterId: ""

@@ -1,0 +1,41 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/address/{{address}}/internal?limit=20&offset=0'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "label": null,
+        "isContract": true,
+        "isToken": false,
+        "total": 1,
+        "limit": 20,
+        "offset": 0,
+        "internalTransactions": [
+          {
+            "traceAddress": [
+              0
+            ],
+            "callType": "call",
+            "fromAddress": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "toAddress": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+            "rawValue": "1000000000000000000",
+            "value": "1",
+            "gas": "21000",
+            "gasUsed": "21000",
+            "input": "0x",
+            "output": "0x",
+            "error": null
+          }
+        ]
+      }
+order: 1000

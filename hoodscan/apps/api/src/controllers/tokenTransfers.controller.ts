@@ -30,15 +30,22 @@ export async function listTokenTransfersByAddress(req: Request, res: Response) {
     OR: [{ fromAddress: address }, { toAddress: address }],
   };
 
-  const [transfers, total] = await Promise.all([
+  const [transfers, cappedRows] = await Promise.all([
     prisma.tokenTransfer.findMany({
       where,
       orderBy: [{ blockNumber: "desc" }, { logIndex: "desc" }],
       take: limit,
       skip: offset,
     }),
-    prisma.tokenTransfer.count({ where }),
+    prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*)::bigint AS count FROM (
+        SELECT 1 FROM "TokenTransfer"
+        WHERE ("fromAddress" = ${address} OR "toAddress" = ${address})
+        LIMIT ${EXPLORER_LIST_CAP + 1}
+      ) t
+    `,
   ]);
+  const total = Number(cappedRows[0]?.count ?? 0);
 
   // Resolve token metadata once per unique token in this page (bounded
   // by the page size), so 25 rows of the same token cost a single read.
@@ -51,8 +58,8 @@ export async function listTokenTransfersByAddress(req: Request, res: Response) {
   const metaByToken = new Map(metaEntries);
 
   // Contract icons + verified names for From/To parties (shared helper).
-  const { isContract: isContractByAddr, names: nameByAddr } =
-    await resolveContractInfo(transfers.flatMap((t) => [t.fromAddress, t.toAddress]));
+  const { isContract: isContractByAddr, isToken: isTokenByAddr, names: nameByAddr } =
+    await resolveContractInfo(transfers.flatMap((t) => [t.fromAddress, t.toAddress]), false);
 
   const rows = transfers.map((t) => {
     const meta = metaByToken.get(t.tokenAddress) ?? null;
@@ -80,6 +87,8 @@ export async function listTokenTransfersByAddress(req: Request, res: Response) {
       fromLabel: getAddressLabel(t.fromAddress) ?? nameByAddr.get(t.fromAddress) ?? null,
       toLabel: getAddressLabel(t.toAddress) ?? nameByAddr.get(t.toAddress) ?? null,
       fromIsContract: isContractByAddr.get(t.fromAddress) ?? null,
+      fromIsToken: isTokenByAddr.get(t.fromAddress) ?? false,
+      toIsToken: isTokenByAddr.get(t.toAddress) ?? false,
       toIsContract: isContractByAddr.get(t.toAddress) ?? null,
       tokenIsContract: true,
     };

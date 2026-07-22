@@ -1,0 +1,42 @@
+$kind: http-request
+name: List internal transactions by address
+method: GET
+url: '{{baseUrl}}/address/{{address}}/internal?limit=20&offset=0'
+order: 12000
+description: |-
+  Internal transactions (value-transferring sub-calls) where the address is the sender or receiver. Returns the address header + pagination envelope + an internalTransactions[] array. Each item includes callType, fromAddress, toAddress, and string value/gas/gasUsed.
+examples: './.resources/List internal transactions by address.resources/examples'
+queryParams:
+  - key: limit
+    value: '20'
+  - key: offset
+    value: '0'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('address + pagination envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.address, 'address').to.be.a('string');
+        pm.expect(json.total, 'total').to.be.a('number');
+        pm.expect(json.limit, 'limit').to.be.a('number');
+        pm.expect(json.offset, 'offset').to.be.a('number');
+        pm.expect(json.internalTransactions, 'internalTransactions').to.be.an('array');
+      });
+      pm.test('internal transaction items are well-formed', function () {
+        var arr = pm.response.json().internalTransactions;
+        if (Array.isArray(arr) && arr.length > 0) {
+          pm.expect(arr[0].callType, 'callType').to.be.a('string');
+          pm.expect(arr[0].fromAddress, 'fromAddress').to.be.a('string');
+          pm.expect(arr[0].value, 'value').to.be.a('string');
+        }
+      });

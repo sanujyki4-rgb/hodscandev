@@ -47,12 +47,12 @@ export async function listTransactionsByAddress(req: Request, res: Response) {
 
   // Contract flags + verified names for this address and every tx party
   // (shared helper: dedups, resolves + caches names, Etherscan-style).
-  const { isContract: isContractByAddr, names: nameByAddr } = await resolveContractInfo([
+  const { isContract: isContractByAddr, isToken: isTokenByAddr, names: nameByAddr } = await resolveContractInfo([
     address,
     ...transactions
       .flatMap((tx) => [tx.fromAddress, tx.toAddress])
       .filter((a): a is string => !!a),
-  ]);
+  ], false);
 
   // Method labels via the same shared resolver list endpoints use
   // (allowRemote=false, so this stays fast — curated map + cache only).
@@ -63,6 +63,7 @@ export async function listTransactionsByAddress(req: Request, res: Response) {
       address,
       label: getAddressLabel(address),
       isContract: isContractByAddr.get(address) ?? null,
+      isToken: isTokenByAddr.get(address) ?? false,
       hasNftActivity,
       total: Math.min(total, EXPLORER_LIST_CAP),
       limit,
@@ -74,6 +75,8 @@ export async function listTransactionsByAddress(req: Request, res: Response) {
           ? (getAddressLabel(tx.toAddress) ?? nameByAddr.get(tx.toAddress) ?? null)
           : null,
         fromIsContract: isContractByAddr.get(tx.fromAddress) ?? null,
+        fromIsToken: isTokenByAddr.get(tx.fromAddress) ?? false,
+        toIsToken: tx.toAddress ? (isTokenByAddr.get(tx.toAddress) ?? false) : false,
         toIsContract: tx.toAddress ? (isContractByAddr.get(tx.toAddress) ?? null) : null,
       })),
     })

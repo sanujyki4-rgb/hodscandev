@@ -1,0 +1,35 @@
+$kind: http-request
+name: Get transaction state diff
+method: GET
+url: '{{baseUrl}}/transactions/{{txHash}}/state-diff'
+order: 6000
+description: |-
+  Per-account balance / nonce / storage deltas for a transaction, computed from a prestateTracer trace. Returns { txHash, unavailable, stateChanges[] }. unavailable is true when tracing is not available (stateChanges empty). Each change has address, string balanceBefore/balanceAfter, nonceBefore/nonceAfter, and storageChanges[] of { slot, before, after }.
+examples: './.resources/Get transaction state diff.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('state-diff envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.txHash, 'txHash').to.be.a('string');
+        if (json.unavailable !== undefined) pm.expect(json.unavailable, 'unavailable').to.be.a('boolean');
+        pm.expect(json.stateChanges, 'stateChanges').to.be.an('array');
+      });
+      pm.test('state change items are well-formed', function () {
+        var arr = pm.response.json().stateChanges;
+        if (Array.isArray(arr) && arr.length > 0) {
+          pm.expect(arr[0].address, 'address').to.be.a('string');
+          pm.expect(arr[0].balanceBefore, 'balanceBefore').to.be.a('string');
+          pm.expect(arr[0].balanceAfter, 'balanceAfter').to.be.a('string');
+        }
+      });

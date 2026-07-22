@@ -1,0 +1,1088 @@
+openapi: 3.0.3
+info:
+  title: Hoodscan API
+  version: 1.0.0
+  description: >
+    Read API for the Hoodscan block explorer (Robinhood Chain, an Arbitrum-style
+    L2). All list endpoints share a `{ ..., total, limit, offset }` envelope,
+    large integers (wei / token amounts / block numbers) are serialized as
+    strings, addresses are lowercase, and errors use `{ "error": string }`.
+    A global rate limit of 120 requests/minute per IP applies to all endpoints
+    except `/health`, `/docs` and `/openapi.json`.
+servers:
+  - url: http://localhost:4000
+    description: Local development
+
+tags:
+  - name: System
+  - name: Blocks
+  - name: Transactions
+  - name: Address
+  - name: Tokens
+  - name: Stats
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Liveness probe. Registered before the rate limiter (never throttled).
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /openapi.json:
+    get:
+      tags: [System]
+      summary: OpenAPI specification (JSON)
+      description: This document, served as JSON (parsed from openapi.yaml).
+      responses:
+        "200":
+          description: OpenAPI document
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /blocks:
+    get:
+      tags: [Blocks]
+      summary: List latest blocks
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Latest blocks, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      blocks:
+                        type: array
+                        items: { $ref: "#/components/schemas/Block" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /blocks/{number}:
+    get:
+      tags: [Blocks]
+      summary: Get a block by number
+      parameters:
+        - name: number
+          in: path
+          required: true
+          description: Block number (integer)
+          schema: { type: string, example: "14571309" }
+      responses:
+        "200":
+          description: Block detail including its transactions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Block"
+                  - type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /blocks/{number}/transactions:
+    get:
+      tags: [Blocks]
+      summary: List transactions in a block
+      parameters:
+        - name: number
+          in: path
+          required: true
+          schema: { type: string, example: "14571309" }
+      responses:
+        "200":
+          description: Array of transactions in the block
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: List latest transactions
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Latest transactions, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/Transaction" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /transactions/l1-to-l2:
+    get:
+      tags: [Transactions]
+      summary: List L1->L2 messages
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [all, relayed, initiated], default: all }
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: L1->L2 messages
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            originBlockNumber: { type: string }
+                            originTxHash: { type: string }
+                            originAddress: { type: string }
+                            originTimestamp: { type: string }
+                            status: { type: string, example: relayed }
+                            l2TxHash: { type: string, nullable: true }
+                            l2Block:
+                              type: object
+                              nullable: true
+                              properties:
+                                number: { type: string }
+                                timestamp: { type: string }
+                                isFinalized: { type: boolean }
+
+  /transactions/{hash}:
+    get:
+      tags: [Transactions]
+      summary: Get a transaction by hash
+      parameters:
+        - $ref: "#/components/parameters/HashPath"
+      responses:
+        "200":
+          description: Full transaction, decoded input, and token transfer info
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TransactionDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /transactions/{hash}/internal:
+    get:
+      tags: [Transactions]
+      summary: Internal transactions (call trace) for a transaction
+      parameters:
+        - $ref: "#/components/parameters/HashPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Internal transactions decoded on-demand from a callTracer trace
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      txHash: { type: string }
+                      traceError: { type: string, nullable: true }
+                      internalTransactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/InternalTransaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /transactions/{hash}/state-diff:
+    get:
+      tags: [Transactions]
+      summary: State changes (Advanced TxInfo) for a transaction
+      parameters:
+        - $ref: "#/components/parameters/HashPath"
+      responses:
+        "200":
+          description: >
+            Per-account balance/nonce/storage deltas from a prestateTracer trace.
+            `unavailable: true` when tracing is not available for the tx.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txHash: { type: string }
+                  unavailable: { type: boolean }
+                  stateChanges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        address: { type: string }
+                        balanceBefore: { type: string }
+                        balanceAfter: { type: string }
+                        nonceBefore: { type: integer, nullable: true }
+                        nonceAfter: { type: integer, nullable: true }
+                        storageChanges:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              slot: { type: string }
+                              before: { type: string }
+                              after: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /transactions/{hash}/user-operations:
+    get:
+      tags: [Transactions]
+      summary: ERC-4337 user operations in a transaction
+      parameters:
+        - $ref: "#/components/parameters/HashPath"
+      responses:
+        "200":
+          description: User operations decoded from EntryPoint logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txHash: { type: string }
+                  total: { type: integer }
+                  userOperations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        userOpHash: { type: string }
+                        sender: { type: string }
+                        paymaster: { type: string, nullable: true }
+                        nonce: { type: string }
+                        success: { type: boolean }
+                        actualGasCost: { type: string }
+                        actualGasUsed: { type: string }
+                        entryPoint: { type: string }
+                        entryPointVersion: { type: string }
+                        logIndex: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}:
+    get:
+      tags: [Address]
+      summary: Address overview (native balance + summary)
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Native (gas-token) balance, nonce, tx count, and flags
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - type: object
+                    properties:
+                      nativeBalance:
+                        type: string
+                        nullable: true
+                        description: Balance in wei (string); null if RPC unavailable
+                      nonce: { type: integer, nullable: true }
+                      txCount: { type: integer }
+                      hasNftActivity: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/transactions:
+    get:
+      tags: [Address]
+      summary: Transactions where the address is sender or receiver
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Address transactions + header (label, isContract, isToken)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      hasNftActivity: { type: boolean }
+                      transactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/token-transfers:
+    get:
+      tags: [Address]
+      summary: ERC-20 token transfers involving the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Token transfers for the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      transfers:
+                        type: array
+                        items: { $ref: "#/components/schemas/TokenTransfer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/token-holdings:
+    get:
+      tags: [Address]
+      summary: ERC-20 token portfolio (current holdings) for the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Current ERC-20 holdings (balance > 0), ranked by balance
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      address: { type: string }
+                      holdings:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            tokenAddress: { type: string }
+                            name: { type: string, nullable: true }
+                            symbol: { type: string, nullable: true }
+                            decimals: { type: integer, nullable: true }
+                            rawBalance: { type: string }
+                            balance: { type: string, nullable: true }
+                            logo: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/nft-transfers:
+    get:
+      tags: [Address]
+      summary: ERC-721/1155 transfers involving the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: NFT transfers for the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      transfers:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            txHash: { type: string }
+                            logIndex: { type: integer }
+                            blockNumber: { type: string }
+                            timestamp: { type: string }
+                            tokenAddress: { type: string }
+                            tokenId: { type: string }
+                            amount: { type: string }
+                            standard: { type: string, example: ERC-721 }
+                            batchIndex: { type: integer, nullable: true }
+                            tokenName: { type: string, nullable: true }
+                            tokenSymbol: { type: string, nullable: true }
+                            direction: { type: string, nullable: true, enum: [in, out, null] }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/other-transactions:
+    get:
+      tags: [Address]
+      summary: Other transactions (contract creations, etc.) involving the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Other transactions for the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      transactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/events:
+    get:
+      tags: [Address]
+      summary: Event logs emitted by the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Event logs for the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      address: { type: string }
+                      events:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            txHash: { type: string }
+                            logIndex: { type: integer }
+                            blockNumber: { type: string }
+                            timestamp: { type: string }
+                            address: { type: string }
+                            topic0: { type: string }
+                            eventName: { type: string, nullable: true }
+                            topics:
+                              type: array
+                              items: { type: string }
+                            data: { type: string }
+                            decoded: { type: object, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/internal:
+    get:
+      tags: [Address]
+      summary: Internal transactions involving the address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Internal transactions for the address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/AddressHeader"
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      internalTransactions:
+                        type: array
+                        items: { $ref: "#/components/schemas/InternalTransaction" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/contract:
+    get:
+      tags: [Address]
+      summary: Contract bytecode info for an address
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Whether the address is a contract, plus its bytecode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address: { type: string }
+                  isContract: { type: boolean }
+                  bytecode: { type: string, nullable: true }
+                  sizeBytes: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/read-contract:
+    get:
+      tags: [Address]
+      summary: Detected read (view/pure) functions and eager zero-arg values
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Read functions with any eagerly-evaluated zero-arg values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  address: { type: string }
+                  standard: { type: string, nullable: true }
+                  source: { type: string, nullable: true }
+                  supported: { type: boolean }
+                  isProxy: { type: boolean }
+                  functions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        stateMutability: { type: string }
+                        hasInputs: { type: boolean }
+                        inputs:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name: { type: string }
+                              type: { type: string }
+                        outputs:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              type: { type: string }
+                        value: { nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+    post:
+      tags: [Address]
+      summary: Execute a single read function with user-supplied arguments
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [functionName]
+              properties:
+                functionName: { type: string }
+                args:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: Result of the read call
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result: {}
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/verification:
+    get:
+      tags: [Address]
+      summary: Source-code verification status
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Verification status; verified sources + ABI when available
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Verification" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /address/{address}/verify:
+    post:
+      tags: [Address]
+      summary: Submit contract source for verification
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceCode, contractName, compilerVersion, optimizationEnabled, optimizationRuns]
+              properties:
+                sourceCode: { type: string }
+                contractName: { type: string }
+                compilerVersion: { type: string }
+                optimizationEnabled: { type: boolean }
+                optimizationRuns: { type: integer }
+                evmVersion: { type: string }
+                constructorArguments: { type: string }
+      responses:
+        "200":
+          description: Verification outcome (verified true, or false with an error)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Verification" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tokens:
+    get:
+      tags: [Tokens]
+      summary: List tokens
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Tokens ordered by transfer activity
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      tokens:
+                        type: array
+                        items: { $ref: "#/components/schemas/TokenListItem" }
+
+  /tokens/metadata/status:
+    get:
+      tags: [Tokens]
+      summary: Token metadata coverage / resolver status
+      responses:
+        "200":
+          description: Metadata coverage metrics and resolver health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalTokens: { type: integer }
+                  withMetadata: { type: integer }
+                  pendingBacklog: { type: integer }
+                  coveragePct: { type: number }
+                  resolver:
+                    type: object
+                    properties:
+                      reporting: { type: boolean }
+                      backoffLevel: { type: integer }
+                      degraded: { type: boolean }
+                      lastUpdatedAt: { type: string, nullable: true }
+
+  /tokens/{address}:
+    get:
+      tags: [Tokens]
+      summary: Token detail
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Token detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokenAddress: { type: string }
+                  name: { type: string, nullable: true }
+                  symbol: { type: string, nullable: true }
+                  decimals: { type: integer, nullable: true }
+                  isContract: { type: boolean }
+                  transferCount: { type: integer }
+                  holderCount: { type: integer }
+                  rawTotalSupply: { type: string, nullable: true }
+                  totalSupply: { type: string, nullable: true }
+                  logo: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tokens/{address}/transfers:
+    get:
+      tags: [Tokens]
+      summary: Transfers of a token
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Token transfers
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      tokenAddress: { type: string }
+                      name: { type: string, nullable: true }
+                      symbol: { type: string, nullable: true }
+                      decimals: { type: integer, nullable: true }
+                      transfers:
+                        type: array
+                        items: { $ref: "#/components/schemas/TokenTransfer" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tokens/{address}/holders:
+    get:
+      tags: [Tokens]
+      summary: Current token holders (ranked by balance)
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: Holders derived from net transfer balances
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginationEnvelope"
+                  - type: object
+                    properties:
+                      tokenAddress: { type: string }
+                      name: { type: string, nullable: true }
+                      symbol: { type: string, nullable: true }
+                      decimals: { type: integer, nullable: true }
+                      totalSupply: { type: string, nullable: true }
+                      holders:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            rank: { type: integer }
+                            address: { type: string }
+                            label: { type: string, nullable: true }
+                            rawBalance: { type: string }
+                            balance: { type: string }
+                            percentage: { type: number, nullable: true }
+                            isContract: { type: boolean }
+                            isToken: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /tokens/{address}/logo:
+    get:
+      tags: [Tokens]
+      summary: Token logo image (proxied)
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+      responses:
+        "200":
+          description: Binary image of the token logo
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /tokens/{address}/daily:
+    get:
+      tags: [Tokens]
+      summary: Daily transfer analytics for a token
+      parameters:
+        - $ref: "#/components/parameters/AddressPath"
+        - $ref: "#/components/parameters/DaysParam"
+      responses:
+        "200":
+          description: Daily transfer series and summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokenAddress: { type: string }
+                  days: { type: integer }
+                  allowedDays:
+                    type: array
+                    items: { type: integer }
+                  summary:
+                    type: object
+                    properties:
+                      totalTransfers: { type: integer }
+                      activeDays: { type: integer }
+                      avgTransfersPerDay: { type: number }
+                      peakDay: { type: string, nullable: true }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string }
+                        transfers: { type: integer }
+                        senders: { type: integer }
+                        receivers: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /stats/daily:
+    get:
+      tags: [Stats]
+      summary: Network-wide daily statistics
+      parameters:
+        - $ref: "#/components/parameters/DaysParam"
+      responses:
+        "200":
+          description: Daily blocks/transactions series and summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  days: { type: integer }
+                  allowedDays:
+                    type: array
+                    items: { type: integer }
+                  summary:
+                    type: object
+                    properties:
+                      totalTransactions: { type: integer }
+                      totalBlocks: { type: integer }
+                      activeDays: { type: integer }
+                      avgTxPerDay: { type: number }
+                      peakTxDay: { type: string, nullable: true }
+                  points:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string }
+                        blocks: { type: integer }
+                        transactions: { type: integer }
+                        avgTxPerBlock: { type: number }
+                        gasUtilPct: { type: number }
+                        avgBaseFeeGwei: { type: number }
+                        avgBlockSizeBytes: { type: number }
+
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      description: Page size.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    OffsetParam:
+      name: offset
+      in: query
+      description: Number of items to skip.
+      schema: { type: integer, minimum: 0, default: 0 }
+    AddressPath:
+      name: address
+      in: path
+      required: true
+      description: 20-byte hex address (0x-prefixed). Lowercased server-side.
+      schema: { type: string, example: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" }
+    HashPath:
+      name: hash
+      in: path
+      required: true
+      description: 32-byte transaction hash (0x + 64 hex).
+      schema: { type: string, example: "0x88df01...e0f2" }
+    DaysParam:
+      name: days
+      in: query
+      description: Window size in days.
+      schema: { type: integer, enum: [7, 14, 30, 90], default: 30 }
+
+  responses:
+    BadRequest:
+      description: Invalid input (e.g. malformed address or hash)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "Invalid address format" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "Not found" }
+    TooManyRequests:
+      description: Rate limit exceeded (120 requests/minute per IP)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    PaginationEnvelope:
+      type: object
+      properties:
+        total: { type: integer, description: "Total matches (capped by EXPLORER_LIST_CAP)" }
+        limit: { type: integer }
+        offset: { type: integer }
+
+    AddressHeader:
+      type: object
+      properties:
+        address: { type: string }
+        label: { type: string, nullable: true }
+        isContract: { type: boolean, nullable: true }
+        isToken: { type: boolean }
+
+    Block:
+      type: object
+      description: A block. Large numbers are strings. Additional fields may be present.
+      additionalProperties: true
+      properties:
+        number: { type: string }
+        hash: { type: string }
+        parentHash: { type: string }
+        timestamp: { type: string }
+        gasUsed: { type: string }
+        gasLimit: { type: string }
+        baseFeePerGas: { type: string, nullable: true }
+        transactionCount: { type: integer }
+        isFinalized: { type: boolean }
+
+    Transaction:
+      type: object
+      description: A transaction. Large numbers are strings. Additional fields may be present.
+      additionalProperties: true
+      properties:
+        hash: { type: string }
+        blockNumber: { type: string }
+        transactionIndex: { type: integer }
+        fromAddress: { type: string }
+        toAddress: { type: string, nullable: true }
+        value: { type: string }
+        gasUsed: { type: string, nullable: true }
+        status: { type: integer, nullable: true }
+        method: { type: string, nullable: true }
+        block:
+          type: object
+          properties:
+            timestamp: { type: string }
+            isFinalized: { type: boolean }
+
+    TransactionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Transaction"
+        - type: object
+          properties:
+            l1TxHash: { type: string, nullable: true }
+            txTypeLabel: { type: string, nullable: true }
+            fromIsContract: { type: boolean, nullable: true }
+            fromIsToken: { type: boolean, nullable: true }
+            toIsContract: { type: boolean, nullable: true }
+            toIsToken: { type: boolean, nullable: true }
+            decodedInput: { type: object, nullable: true }
+            tokenTransfer: { type: object, nullable: true }
+
+    InternalTransaction:
+      type: object
+      properties:
+        traceAddress:
+          type: array
+          items: { type: integer }
+        callType: { type: string }
+        fromAddress: { type: string }
+        toAddress: { type: string, nullable: true }
+        rawValue: { type: string }
+        value: { type: string }
+        gas: { type: string, nullable: true }
+        gasUsed: { type: string, nullable: true }
+        input: { type: string, nullable: true }
+        output: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+        fromLabel: { type: string, nullable: true }
+        toLabel: { type: string, nullable: true }
+        fromIsContract: { type: boolean, nullable: true }
+        toIsContract: { type: boolean, nullable: true }
+        fromIsToken: { type: boolean, nullable: true }
+        toIsToken: { type: boolean, nullable: true }
+
+    TokenTransfer:
+      type: object
+      properties:
+        txHash: { type: string }
+        logIndex: { type: integer }
+        blockNumber: { type: string }
+        timestamp: { type: string }
+        tokenAddress: { type: string }
+        fromAddress: { type: string }
+        toAddress: { type: string }
+        rawAmount: { type: string }
+        amount: { type: string, nullable: true }
+        symbol: { type: string, nullable: true }
+        name: { type: string, nullable: true }
+        decimals: { type: integer, nullable: true }
+        direction: { type: string, nullable: true, enum: [in, out, null] }
+        fromLabel: { type: string, nullable: true }
+        toLabel: { type: string, nullable: true }
+        fromIsContract: { type: boolean, nullable: true }
+        toIsContract: { type: boolean, nullable: true }
+        fromIsToken: { type: boolean, nullable: true }
+        toIsToken: { type: boolean, nullable: true }
+        tokenIsContract: { type: boolean, nullable: true }
+
+    TokenListItem:
+      type: object
+      properties:
+        tokenAddress: { type: string }
+        name: { type: string, nullable: true }
+        symbol: { type: string, nullable: true }
+        decimals: { type: integer, nullable: true }
+        transferCount: { type: integer }
+        holderCount: { type: integer }
+        logo: { type: string, nullable: true }
+
+    Verification:
+      type: object
+      properties:
+        address: { type: string }
+        verified: { type: boolean }
+        contractName: { type: string, nullable: true }
+        compilerVersion: { type: string, nullable: true }
+        optimizationEnabled: { type: boolean, nullable: true }
+        optimizationRuns: { type: integer, nullable: true }
+        evmVersion: { type: string, nullable: true }
+        sourceCode: { type: string, nullable: true }
+        abi: { type: string, nullable: true }
+        constructorArguments: { type: string, nullable: true }
+        proxyType: { type: string, nullable: true }
+        verifiedAt: { type: string, nullable: true }
+        error: { type: string, nullable: true }
+        implementation:
+          type: object
+          nullable: true
+          properties:
+            address: { type: string }
+            contractName: { type: string, nullable: true }
+            compilerVersion: { type: string, nullable: true }
+            sourceCode: { type: string, nullable: true }
+            abi: { type: string, nullable: true }

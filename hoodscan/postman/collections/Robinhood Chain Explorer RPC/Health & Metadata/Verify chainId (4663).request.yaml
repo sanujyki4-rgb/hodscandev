@@ -1,0 +1,30 @@
+$kind: http-request
+name: Verify chainId (4663)
+method: POST
+url: '{{baseUrl}}'
+order: 500
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: X-API-KEY
+    value: '{{apiKey}}'
+body:
+  type: json
+  content: |-
+    {"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('active environment points to Robinhood Chain (0x1237 = 4663)', function () {
+        var json = pm.response.json();
+        pm.expect(json, 'unexpected RPC error: ' + JSON.stringify(json && json.error)).to.not.have.property('error');
+        pm.expect(json.result, 'eth_chainId result').to.eql('0x1237');
+        pm.expect(parseInt(json.result, 16), 'decimal chainId').to.eql(4663);
+      });

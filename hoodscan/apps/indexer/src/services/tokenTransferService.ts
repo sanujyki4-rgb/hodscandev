@@ -100,5 +100,51 @@ export function extractTokenTransfers(
  */
 export async function saveTokenTransfers(rows: TokenTransferRow[]) {
   if (rows.length === 0) return { count: 0 };
-  return prisma.tokenTransfer.createMany({ data: rows, skipDuplicates: true });
+  const result = await prisma.tokenTransfer.createMany({ data: rows, skipDuplicates: true });
+
+  // Keep the per-day analytics rollup (TokenDailyStat) fresh. Recompute
+  // ONLY the (tokenAddress, UTC-day) pairs this batch touched — each is a
+  // small, index-backed slice (tt_token_ts_idx). Best-effort: a rollup
+  // failure must NEVER break indexing, so errors are swallowed here.
+  try {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const ts = row.timestamp;
+      const dayStart = new Date(
+        Date.UTC(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate())
+      );
+      const token = row.tokenAddress.toLowerCase();
+      const key = `${token}|${dayStart.toISOString()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+      await prisma.$executeRaw`
+        INSERT INTO "TokenDailyStat" ("tokenAddress", "day", "transfers", "senders", "receivers", "updatedAt")
+        SELECT
+          "tokenAddress",
+          date_trunc('day', "timestamp") AS day,
+          COUNT(*)::int,
+          COUNT(DISTINCT "fromAddress")::int,
+          COUNT(DISTINCT "toAddress")::int,
+          NOW()
+        FROM "TokenTransfer"
+        WHERE "tokenAddress" = ${token}
+          AND "timestamp" >= ${dayStart}
+          AND "timestamp" < ${dayEnd}
+        GROUP BY "tokenAddress", date_trunc('day', "timestamp")
+        ON CONFLICT ("tokenAddress", "day") DO UPDATE SET
+          "transfers" = EXCLUDED."transfers",
+          "senders" = EXCLUDED."senders",
+          "receivers" = EXCLUDED."receivers",
+          "updatedAt" = NOW()
+      `;
+    }
+  } catch (err) {
+    console.error("[tokenTransferService] TokenDailyStat rollup update failed:", err);
+  }
+
+  return result;
 }

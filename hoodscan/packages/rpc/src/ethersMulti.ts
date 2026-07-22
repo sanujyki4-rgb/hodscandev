@@ -11,7 +11,7 @@ export type EthersNetworkish = {
  * - One URL → StaticJsonRpcProvider (fast path, static network avoids
  *   eth_chainId on every call).
  * - Many URLs → FallbackProvider with equal priority/weight so healthy
- *   endpoints share load (ideal for several Alchemy API keys) and a
+ *   endpoints share load (ideal for several API keys) and a
  *   dead/slow key is skipped after stallTimeout.
  *
  * Note: FallbackProvider does NOT expose `.send()` for arbitrary JSON-RPC

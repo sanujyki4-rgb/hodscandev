@@ -3,7 +3,13 @@ import { decodeBlock, decodeTransaction } from "../rpc/decoder";
 import { saveBlock } from "../services/blockService";
 import { saveTransactions } from "../services/transactionService";
 import { extractTokenTransfers, saveTokenTransfers } from "../services/tokenTransferService";
+import { applyTokenBalanceUpdates } from "../services/tokenBalanceService";
 import { extractNftTransfers, saveNftTransfers } from "../services/nftTransferService";
+import { extractLogs, saveLogs } from "../services/logService";
+import {
+  indexBlockInternalTransactions,
+  internalTxIndexingEnabled,
+} from "../rpc/traceOnDemand";
 import type { RawBlock, RawTransaction } from "@hoodscan/types";
 
 /**
@@ -40,12 +46,24 @@ export async function pollLatestBlock(): Promise<bigint | null> {
   // and persist them for the address token-transfers tab.
   const tokenTransfers = extractTokenTransfers(receipts, block.number, block.timestamp);
   await saveTokenTransfers(tokenTransfers);
+  // Same rows (no extra RPC) -> maintain live TokenBalance + Token aggregates.
+  await applyTokenBalanceUpdates(tokenTransfers, block.number);
 
   // Same receipts → ERC-721 / ERC-1155 transfers for the NFT tab.
   // (Previously only the NFT backfill job wrote these, so live blocks
   // could lag until backfill caught up.)
   const nftTransfers = extractNftTransfers(receipts, block.number, block.timestamp);
   await saveNftTransfers(nftTransfers);
+
+  // All event logs from the same receipts (no extra RPC) -> the "Events" tab.
+  await saveLogs(extractLogs(receipts, block.number, block.timestamp));
+
+  // Best-effort: trace this block's call frames and persist internal txns
+  // idempotently. Env-gated; swallows its own errors so it can never break
+  // live indexing.
+  if (internalTxIndexingEnabled()) {
+    await indexBlockInternalTransactions(block.number, block.timestamp);
+  }
 
   return block.number;
 }

@@ -13,7 +13,7 @@ variables:
   - key: tokenAddress
     value: ''
 scripts:
-  - type: beforeRequest
+  - type: http:beforeRequest
     language: text/javascript
     code: |-
       // Self-seed valid parameters from the live list endpoints so that the
@@ -22,7 +22,7 @@ scripts:
       const seeds = [
         { flag: 'blockNumber', path: '/blocks?limit=1', pick: function (j) { var r = (j.blocks || j)[0]; return r && String(r.number); } },
         { flag: 'txHash', path: '/transactions?limit=1', pick: function (j) { var r = (j.transactions || j)[0]; return r && r.hash; } },
-        { flag: 'tokenAddress', path: '/tokens?limit=1', pick: function (j) { var r = (j.tokens || j)[0]; return r && r.address; } }
+        { flag: 'tokenAddress', path: '/tokens?limit=1', pick: function (j) { var r = (j.tokens || j)[0]; return r && (r.tokenAddress || r.address); } }
       ];
       seeds.forEach(function (s) {
         if (pm.collectionVariables.get(s.flag)) { return; }

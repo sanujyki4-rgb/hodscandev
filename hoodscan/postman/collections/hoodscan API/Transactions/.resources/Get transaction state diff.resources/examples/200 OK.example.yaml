@@ -1,0 +1,35 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/transactions/{{txHash}}/state-diff'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "txHash": "0x88df016429689c079f3b2f6ad39fa052532c56795b733da78a91ebe6a713944b",
+        "unavailable": false,
+        "stateChanges": [
+          {
+            "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "balanceBefore": "5000000000000000000",
+            "balanceAfter": "4978999999999979000",
+            "nonceBefore": 42,
+            "nonceAfter": 43,
+            "storageChanges": [
+              {
+                "slot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "before": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "after": "0x0000000000000000000000000000000000000000000000000000000000000001"
+              }
+            ]
+          }
+        ]
+      }
+order: 1000

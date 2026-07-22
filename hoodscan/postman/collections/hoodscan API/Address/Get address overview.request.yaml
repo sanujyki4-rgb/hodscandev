@@ -1,0 +1,33 @@
+$kind: http-request
+name: Get address overview
+method: GET
+url: '{{baseUrl}}/address/{{address}}'
+order: 9000
+description: |-
+  Address overview: native (gas-token) balance plus summary flags. Returns the standard address header (address, label, isContract, isToken) plus nativeBalance (wei as a string, or null when the RPC is unavailable), nonce, txCount, and hasNftActivity.
+examples: './.resources/Get address overview.resources/examples'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('address header present', function () {
+        var json = pm.response.json();
+        pm.expect(json.address, 'address').to.be.a('string');
+        pm.expect(json.isToken, 'isToken').to.be.a('boolean');
+      });
+      pm.test('overview fields present', function () {
+        var json = pm.response.json();
+        pm.expect(json).to.have.property('nativeBalance');
+        if (json.nativeBalance !== null) pm.expect(json.nativeBalance).to.be.a('string');
+        pm.expect(json.txCount, 'txCount').to.be.a('number');
+        pm.expect(json.hasNftActivity, 'hasNftActivity').to.be.a('boolean');
+      });

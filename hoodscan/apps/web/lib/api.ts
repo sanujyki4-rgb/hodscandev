@@ -1,5 +1,22 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
+/**
+ * Build an absolute URL for a token logo served by our own API proxy.
+ * `logo` is the API-relative path (e.g. /tokens/0x../logo) or null. Keeping
+ * the proxy on our origin means the upstream (Blockscout) source is hidden.
+ */
+/**
+ * Absolute URL for ANY address's logo via our proxy. Returns a 404 (handled
+ * by the caller's onError fallback) when the address has no logo on file.
+ */
+export function addressLogoSrc(address: string): string {
+  return `${API_BASE_URL}/tokens/${address.toLowerCase()}/logo`;
+}
+
+export function tokenLogoSrc(logo: string | null | undefined): string | null {
+  return logo ? `${API_BASE_URL}${logo}` : null;
+}
+
 export interface BlockSummary {
   number: string;
   hash: string;
@@ -24,7 +41,9 @@ export interface TransactionSummary {
   toLabel?: string | null;
   /** Whether from/to is a smart contract (drives the contract icon). */
   fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
   toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
   value: string;
   gas?: string;
   gasPrice?: string | null;
@@ -210,9 +229,57 @@ export function getTransactionsByAddress(address: string, limit = 20, offset = 0
     limit: number;
     offset: number;
     isContract?: boolean | null;
+    isToken?: boolean | null;
     hasNftActivity?: boolean;
     transactions: TransactionSummary[];
   }>(`/address/${address}/transactions?limit=${limit}&offset=${offset}`, 5);
+}
+
+export interface AddressOverview {
+  address: string;
+  label?: string | null;
+  isContract?: boolean | null;
+  isToken?: boolean | null;
+  /** Raw native (gas token) balance in wei, as a string; null if unavailable. */
+  nativeBalance: string | null;
+  nonce?: number | null;
+  txCount?: number;
+  hasNftActivity?: boolean;
+}
+
+/**
+ * Address header/overview: native (gas token) balance, tx count, and flags.
+ * Backed by GET /address/:address (eth_getBalance, short-cached).
+ */
+export function getAddressOverview(address: string) {
+  return apiFetch<AddressOverview>(`/address/${address}`, 10);
+}
+
+export interface TokenHolding {
+  tokenAddress: string;
+  name: string | null;
+  symbol: string | null;
+  decimals: number | null;
+  /** Raw base-unit balance as a string. */
+  rawBalance: string;
+  /** Balance scaled by decimals (formatted); null if decimals unknown. */
+  balance: string | null;
+  /** API-relative path to the proxied token logo, or null. */
+  logo?: string | null;
+}
+
+/**
+ * Current ERC-20 portfolio (holdings) for an address, ranked by balance.
+ * Backed by GET /address/:address/token-holdings (reads TokenBalance).
+ */
+export function getAddressTokenHoldings(address: string, limit = 25, offset = 0) {
+  return apiFetch<{
+    address: string;
+    total: number;
+    limit: number;
+    offset: number;
+    holdings: TokenHolding[];
+  }>(`/address/${address}/token-holdings?limit=${limit}&offset=${offset}`, 10);
 }
 
 export interface TokenTransferRow {
@@ -232,7 +299,9 @@ export interface TokenTransferRow {
   fromLabel?: string | null;
   toLabel?: string | null;
   fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
   toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
   tokenIsContract?: boolean | null;
 }
 
@@ -250,6 +319,7 @@ export function getTokenTransfersByAddress(address: string, limit = 25, offset =
 export interface AddressContract {
   address: string;
   isContract: boolean;
+  isToken?: boolean | null;
   bytecode: string;
   sizeBytes: number;
 }
@@ -276,7 +346,9 @@ export interface NftTransferRow {
   fromLabel?: string | null;
   toLabel?: string | null;
   fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
   toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
   tokenIsContract?: boolean | null;
 }
 
@@ -297,6 +369,8 @@ export interface TokenListItem {
   symbol: string | null;
   decimals: number | null;
   transferCount: number;
+  /** API-relative path to the proxied token logo, or null. */
+  logo?: string | null;
 }
 
 export function getTokens(limit = 25, offset = 0) {
@@ -314,8 +388,11 @@ export interface TokenDetail {
   symbol: string | null;
   decimals: number | null;
   isContract: boolean | null;
+  isToken?: boolean | null;
   transferCount: number;
   holderCount: number;
+  /** API-relative path to the proxied token logo, or null. */
+  logo?: string | null;
   /** Formatted total supply (scaled by decimals); null if unavailable. */
   totalSupply: string | null;
   /** Raw uint256 total supply as a string; null if unavailable. */
@@ -338,7 +415,9 @@ export interface TokenTransferListRow {
   fromLabel?: string | null;
   toLabel?: string | null;
   fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
   toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
 }
 
 export function getTokenTransfers(address: string, limit = 25, offset = 0) {
@@ -362,6 +441,7 @@ export interface TokenHolderRow {
   balance: string | null;
   percentage?: number | null;
   isContract?: boolean | null;
+  isToken?: boolean | null;
 }
 
 export function getTokenHolders(address: string, limit = 25, offset = 0) {
@@ -545,4 +625,210 @@ export async function submitVerification(
   } catch (err) {
     return { address, verified: false, error: err instanceof Error ? err.message : "Network error" };
   }
+}
+
+/**
+ * One internal transaction (a sub-call / value transfer produced while a
+ * transaction executed), decoded from a debug_trace callTracer result by
+ * GET /transactions/:hash/internal. `value` is already scaled to ETH; the
+ * raw wei value is in `rawValue`. gas/gasUsed are decimal strings.
+ */
+export interface InternalTxRow {
+  traceAddress: string;
+  callType: string;
+  fromAddress: string;
+  toAddress: string | null;
+  rawValue: string;
+  value: string;
+  gas: string | null;
+  gasUsed: string | null;
+  input: string | null;
+  output: string | null;
+  error: string | null;
+  fromLabel?: string | null;
+  toLabel?: string | null;
+  fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
+  toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
+}
+
+export interface InternalTxResponse {
+  txHash: string;
+  total: number;
+  limit: number;
+  offset: number;
+  /**
+   * Non-null when the on-demand trace couldn't be fetched (e.g. the provider
+   * doesn't support debug_trace* or the call failed). The UI shows this as a
+   * note instead of failing — internalTransactions will be empty.
+   */
+  traceError: string | null;
+  internalTransactions: InternalTxRow[];
+}
+
+/**
+ * Internal transactions for a single tx hash. The API lazily traces the tx
+ * on first request (traces are on-demand, never bulk-indexed), so this can be
+ * a touch slower than other reads and is cached for 15s.
+ */
+export function getInternalTransactions(hash: string, limit = 25, offset = 0) {
+  return apiFetch<InternalTxResponse>(
+    `/transactions/${hash}/internal?limit=${limit}&offset=${offset}`,
+    15
+  );
+}
+
+/**
+ * One decoded storage-slot change within an account (before/after are 32-byte
+ * 0x hex values). Powers the per-account storage rows in the State tab.
+ */
+export interface StorageChange {
+  slot: string;
+  before: string;
+  after: string;
+}
+
+/**
+ * One account's state delta for a transaction, decoded from a prestateTracer
+ * (diffMode) trace. Balances are wei decimal strings. Only accounts/slots that
+ * actually changed are present.
+ */
+export interface StateChangeRow {
+  address: string;
+  balanceBefore: string;
+  balanceAfter: string;
+  nonceBefore: number;
+  nonceAfter: number;
+  storageChanges: StorageChange[];
+}
+
+export interface StateDiffResponse {
+  txHash: string;
+  stateChanges: StateChangeRow[];
+  /** True when the provider couldn't trace the tx (graceful, not an error). */
+  unavailable?: boolean;
+}
+
+/**
+ * State changes ("Advanced TxInfo") for a single tx, traced on demand from a
+ * prestateTracer (diffMode) result. Cached 15s like the internal-tx endpoint.
+ */
+export function getTransactionStateDiff(hash: string) {
+  return apiFetch<StateDiffResponse>(`/transactions/${hash}/state-diff`, 15);
+}
+
+export interface UserOperationRow {
+  userOpHash: string | null;
+  sender: string | null;
+  paymaster: string | null;
+  nonce: string;
+  success: boolean;
+  actualGasCost: string;
+  actualGasUsed: string;
+  entryPoint: string;
+  entryPointVersion: string | null;
+  logIndex: number;
+}
+
+export interface UserOperationsResponse {
+  txHash: string;
+  total: number;
+  userOperations: UserOperationRow[];
+}
+
+/**
+ * ERC-4337 User Operations decoded from a tx's EntryPoint UserOperationEvent
+ * logs. Empty for normal (non-AA) transactions. Cached 15s.
+ */
+export function getTransactionUserOperations(hash: string) {
+  return apiFetch<UserOperationsResponse>(`/transactions/${hash}/user-operations`, 15);
+}
+
+/**
+ * One address-level internal transaction (a trace sub-call / value transfer
+ * where the address is the sender or recipient), read from the indexer's
+ * InternalTransaction table. `value` is scaled to ETH; `rawValue` is wei.
+ * Unlike the per-tx endpoint this is never traced on demand — it only returns
+ * what the indexer has already persisted.
+ */
+export interface AddressInternalTxRow {
+  txHash: string;
+  blockNumber: string;
+  timestamp: string;
+  traceAddress: string;
+  callType: string;
+  fromAddress: string;
+  toAddress: string | null;
+  rawValue: string;
+  value: string;
+  gas: string | null;
+  gasUsed: string | null;
+  error: string | null;
+  direction: "in" | "out" | null;
+  fromLabel?: string | null;
+  toLabel?: string | null;
+  fromIsContract?: boolean | null;
+  fromIsToken?: boolean | null;
+  toIsContract?: boolean | null;
+  toIsToken?: boolean | null;
+}
+
+export function getAddressInternalTransactions(address: string, limit = 25, offset = 0) {
+  return apiFetch<{
+    address: string;
+    label?: string | null;
+    total: number;
+    limit: number;
+    offset: number;
+    internalTransactions: AddressInternalTxRow[];
+  }>(`/address/${address}/internal?limit=${limit}&offset=${offset}`, 5);
+}
+
+/**
+ * Non-standard transactions (L1<->L2 messages + ArbOS system txs) for an
+ * address — powers the "Other Transactions" tab. Same TransactionSummary
+ * shape as the main transactions list, so AddressTxTable renders it as-is.
+ */
+export function getOtherTransactionsByAddress(address: string, limit = 25, offset = 0) {
+  return apiFetch<{
+    address: string;
+    label?: string | null;
+    total: number;
+    limit: number;
+    offset: number;
+    transactions: TransactionSummary[];
+  }>(`/address/${address}/other-transactions?limit=${limit}&offset=${offset}`, 5);
+}
+
+/**
+ * One event log emitted by an address (contract), from the indexer's Log
+ * table. eventName is a friendly name when topic0 is a known signature; the
+ * raw topics + data are always present. Powers the address/contract Events tab.
+ */
+export interface AddressEventRow {
+  txHash: string;
+  logIndex: number;
+  blockNumber: string;
+  timestamp: string;
+  address: string;
+  topic0: string | null;
+  eventName: string | null;
+  topics: string[];
+  data: string;
+  decoded?: {
+    name: string;
+    signature: string;
+    params: { name: string; type: string; indexed: boolean; value: string }[];
+  } | null;
+}
+
+export function getAddressEvents(address: string, limit = 25, offset = 0) {
+  return apiFetch<{
+    address: string;
+    total: number;
+    limit: number;
+    offset: number;
+    events: AddressEventRow[];
+  }>(`/address/${address}/events?limit=${limit}&offset=${offset}`, 5);
 }

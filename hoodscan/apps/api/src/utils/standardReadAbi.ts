@@ -12,6 +12,7 @@ import type { AbiFunction } from "viem";
 import { getContractType } from "./contractType";
 import { getTokenMetadata } from "./tokenResolver";
 import { readRpcClient } from "./rpcClient";
+import { redis } from "../middlewares/cache";
 
 /** Re-export shared multi-RPC client for controllers that import from here. */
 export { readRpcClient };
@@ -139,7 +140,37 @@ export const READ_ABIS: Record<ReadStandard, readonly AbiFunction[]> = {
  * when the contract matches no known standard (Phase 1 has no verified
  * ABI to fall back on).
  */
+// Cache the detected standard so the cold read-contract path doesn't repeat
+// the ERC-165 / metadata RPC probes for the same address on every request.
+const STANDARD_TTL = 300; // seconds — cache a positively detected standard
+const STANDARD_NULL_TTL = 30; // seconds — briefly cache "no known standard"
+const standardKey = (addr: string) => `hoodscan:readstd:${addr}`;
+
 export async function detectReadStandard(address: string): Promise<ReadStandard | null> {
+  const addr = address.toLowerCase();
+  const key = standardKey(addr);
+
+  // Best-effort cache hit. An empty-string sentinel means "cached null".
+  try {
+    const cached = await redis.get(key);
+    if (cached !== null) return cached === "" ? null : (cached as ReadStandard);
+  } catch {
+    // ignore cache read failures — fall through to a live detection
+  }
+
+  const result = await detectReadStandardLive(addr);
+
+  try {
+    await redis.set(key, result ?? "", "EX", result === null ? STANDARD_NULL_TTL : STANDARD_TTL);
+  } catch {
+    // ignore cache write failures
+  }
+
+  return result;
+}
+
+/** Live standard detection (RPC probes), used behind the Redis cache above. */
+async function detectReadStandardLive(address: string): Promise<ReadStandard | null> {
   const type = await getContractType(address, true);
   if (type === "erc721" || type === "erc1155") return type;
 

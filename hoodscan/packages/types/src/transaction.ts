@@ -83,7 +83,7 @@ export interface DecodedTransaction {
 /**
  * Known Arbitrum/Robinhood Chain transaction types worth labeling
  * distinctly in the UI, based on what we've observed on mainnet.
- * Verified against Alchemy's Arbitrum/Ethereum API differences doc
+ * Verified against Arbitrum/Ethereum API differences docs
  * and the go-ethereum-arbitrum source (core/types transaction type
  * constants) — "0x69" is the real L1->L2 message type; "0x6a" is
  * NOT an L1->L2 message, it's ArbOS's own per-block housekeeping tx.

@@ -33,12 +33,52 @@ export function shortAddr(addr: string): string {
  * with the raw `formatted` value in a title tooltip so full precision
  * is still one hover away.
  */
+/**
+ * Scale a raw integer token amount (base units) by `decimals` into a
+ * human-readable, thousands-separated string trimmed to `maxFrac` fraction
+ * digits. Returns null when the raw value isn't a plain integer. Used as the
+ * client-side fallback for when the API couldn't pre-scale the amount but the
+ * token's decimals are known.
+ */
+export function formatRawTokenAmount(
+  rawAmount: string,
+  decimals: number,
+  maxFrac = 4
+): string | null {
+  const negative = rawAmount.startsWith("-");
+  const digits = negative ? rawAmount.slice(1) : rawAmount;
+  if (!/^\d+$/.test(digits)) return null;
+  try {
+    if (decimals <= 0) {
+      return (negative ? "-" : "") + BigInt(digits).toLocaleString("en-US");
+    }
+    const padded = digits.padStart(decimals + 1, "0");
+    const intPart = padded.slice(0, padded.length - decimals);
+    const fracPart = padded.slice(padded.length - decimals);
+    const intFormatted = BigInt(intPart).toLocaleString("en-US");
+    const fracTrimmed = fracPart.slice(0, maxFrac).replace(/0+$/, "");
+    return (
+      (negative ? "-" : "") +
+      (fracTrimmed ? `${intFormatted}.${fracTrimmed}` : intFormatted)
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function shortTokenAmount(
   formatted: string | null,
   rawAmount: string,
-  maxFrac = 4
+  maxFrac = 4,
+  decimals?: number | null
 ): string {
-  if (!formatted) return `${rawAmount} (raw)`;
+  if (!formatted) {
+    if (decimals !== null && decimals !== undefined) {
+      const scaled = formatRawTokenAmount(rawAmount, decimals, maxFrac);
+      if (scaled !== null) return scaled;
+    }
+    return `${rawAmount} (raw)`;
+  }
   const [intPart, fracPart] = formatted.split(".");
   if (!fracPart) return intPart ?? formatted;
   const trimmed = fracPart.slice(0, maxFrac).replace(/0+$/, "");

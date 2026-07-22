@@ -30,22 +30,6 @@ export function dedupeUrls(urls: string[]): string[] {
 }
 
 /**
- * Build Alchemy HTTPS endpoints from API keys (or pass-through full URLs).
- * Network is the Alchemy subdomain, e.g. "eth-mainnet".
- */
-export function alchemyUrlsFromKeys(
-  keys: string[],
-  network: string
-): string[] {
-  const net = network.trim();
-  if (!net || keys.length === 0) return [];
-  return keys.map((key) => {
-    if (key.startsWith("http://") || key.startsWith("https://")) return key;
-    return `https://${net}.g.alchemy.com/v2/${key}`;
-  });
-}
-
-/**
  * Merge ordered URL sources (first wins for preference / round-robin start).
  * Empty sources are ignored.
  */
@@ -58,7 +42,7 @@ export function mergeRpcUrls(...sources: Array<string[] | undefined>): string[] 
 }
 
 /**
- * Redact API keys in RPC URLs for safe logging (Alchemy /v2/KEY → /v2/*** ).
+ * Redact API keys in RPC URLs for safe logging (/v2/KEY → /v2/*** ).
  */
 export function redactRpcUrl(url: string): string {
   try {
@@ -71,30 +55,27 @@ export function redactRpcUrl(url: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// L2 (Robinhood Chain) RPC — multi-endpoint
+// L2 (Robinhood Chain) RPC URL list.
 //
-// Sources (merged, first listed = preferred start of round-robin):
-//   1. RH_RPC_URLS              comma-separated full URLs (any provider)
-//   2. RH_RPC_URL_MAINNET       single URL (backward compatible)
-//   3. ALCHEMY_L2_API_KEYS      + ALCHEMY_L2_NETWORK → Alchemy URLs
-// Fallback default: public Robinhood mainnet RPC.
+// This is the plain URL list used by the viem/ethers clients that CANNOT send
+// custom auth headers (the API's read-contract viem client and the ethers
+// provider @arbitrum/sdk needs for L1->L2 message reads). It is also the
+// router's degrade-to-default when no capability providers are configured.
+//
+// Built from the header-free providers, in preference order:
+//   ZAN (bulk) → QuickNode (fallback) → public Robinhood RPC.
+// NOTE: Uniblock is intentionally NOT here because it requires an "X-API-KEY"
+// header; Uniblock is used only via the capability router (packages/rpc/
+// src/providerRoles.ts), which sends that header.
 // ---------------------------------------------------------------------------
 
 const DEFAULT_L2_RPC = "https://rpc.mainnet.chain.robinhood.com";
 
-const alchemyL2Network =
-  process.env.ALCHEMY_L2_NETWORK?.trim() ||
-  process.env.ALCHEMY_RH_NETWORK?.trim() ||
-  "";
-
 export const L2_RPC_URLS: string[] = (() => {
   const urls = mergeRpcUrls(
-    parseEnvList(process.env.RH_RPC_URLS),
-    parseEnvList(process.env.RH_RPC_URL_MAINNET),
-    alchemyUrlsFromKeys(
-      parseEnvList(process.env.ALCHEMY_L2_API_KEYS),
-      alchemyL2Network
-    )
+    parseEnvList(process.env.ZAN_RPC_URLS),
+    parseEnvList(process.env.QUICKNODE_RPC_URLS),
+    [DEFAULT_L2_RPC]
   );
   return urls.length > 0 ? urls : [DEFAULT_L2_RPC];
 })();
@@ -102,8 +83,7 @@ export const L2_RPC_URLS: string[] = (() => {
 /** First L2 URL — backward-compatible single-URL export. */
 export const RPC_URL_MAINNET = L2_RPC_URLS[0] ?? DEFAULT_L2_RPC;
 
-export const RPC_URL_TESTNET =
-  process.env.RH_RPC_URL_TESTNET ?? "https://rpc.testnet.chain.robinhood.com";
+export const RPC_URL_TESTNET = "https://rpc.testnet.chain.robinhood.com";
 
 export const BLOCK_EXPLORER_URL = "https://robinhoodchain.blockscout.com";
 
@@ -123,20 +103,12 @@ export const L1_ROLLUP_ADDRESS = "0x23A19d23e89166adedbDcB432518AB01e4272D94";
 // Sources:
 //   1. L1_RPC_URLS              comma-separated full URLs
 //   2. L1_RPC_URL_MAINNET       single URL (backward compatible)
-//   3. ALCHEMY_L1_API_KEYS      → https://eth-mainnet.g.alchemy.com/v2/{key}
 // No public default (L1 needs a real provider). Empty list disables L1 jobs.
 // ---------------------------------------------------------------------------
 
-const alchemyL1Network =
-  process.env.ALCHEMY_L1_NETWORK?.trim() || "eth-mainnet";
-
 export const L1_RPC_URLS: string[] = mergeRpcUrls(
   parseEnvList(process.env.L1_RPC_URLS),
-  parseEnvList(process.env.L1_RPC_URL_MAINNET),
-  alchemyUrlsFromKeys(
-    parseEnvList(process.env.ALCHEMY_L1_API_KEYS),
-    alchemyL1Network
-  )
+  parseEnvList(process.env.L1_RPC_URL_MAINNET)
 );
 
 /** First L1 URL (or "") — backward-compatible single-URL export. */
@@ -205,6 +177,17 @@ export const UNIBLOCK_RPC_URLS: string[] = parseEnvList(
 /** Uniblock requires this in an "X-API-KEY" request header. Never inlined. */
 export const UNIBLOCK_API_KEY: string =
   process.env.UNIBLOCK_API_KEY?.trim() ?? "";
+
+/**
+ * Optional MULTI-KEY list for Uniblock, comma/whitespace/newline separated,
+ * aligned by index with UNIBLOCK_RPC_URLS (URL #1 uses key #1, and so on).
+ * Use this when you have several Uniblock endpoints each with its OWN key.
+ * If you only have one key, keep using UNIBLOCK_API_KEY (singular) above —
+ * it is applied as the shared X-API-KEY for every Uniblock URL.
+ */
+export const UNIBLOCK_API_KEYS: string[] = parseEnvList(
+  process.env.UNIBLOCK_API_KEYS
+);
 
 export const QUICKNODE_RPC_URLS: string[] = parseEnvList(
   process.env.QUICKNODE_RPC_URLS

@@ -12,6 +12,11 @@ import {
   extractNftTransfers,
   saveNftTransfers,
 } from "../services/nftTransferService";
+import {
+  indexBlockInternalTransactions,
+  internalTxIndexingEnabled,
+} from "../rpc/traceOnDemand";
+import { extractLogs, saveLogs } from "../services/logService";
 import type { RawBlock, RawTransaction, RawReceipt } from "@hoodscan/types";
 
 /**
@@ -27,7 +32,8 @@ import type { RawBlock, RawTransaction, RawReceipt } from "@hoodscan/types";
  *   BACKFILL_START_BLOCK   inclusive range start (default: current chain head)
  *   BACKFILL_END_BLOCK     inclusive range end   (default: 0 = genesis)
  *   BACKFILL_DIRECTION     "reverse" (latest→oldest, DEFAULT) | "forward"
- *   BACKFILL_DELAY_MS      throttle between blocks in ms (default 100)
+ *   BACKFILL_DELAY_MS      throttle between batches in ms (default 100)
+ *   BACKFILL_CONCURRENCY   blocks fetched in parallel per batch (default 8)
  *
  * Provider routing is handled by @hoodscan/rpc `sendRpc`:
  *   ZAN_RPC_URLS / UNIBLOCK_RPC_URLS + UNIBLOCK_API_KEY / QUICKNODE_RPC_URLS.
@@ -73,6 +79,8 @@ export type GaplessBackfillOptions = {
   endBlock?: bigint;
   direction?: Direction;
   delayMs?: number;
+  /** Blocks fetched+stored in parallel per batch (default 8). */
+  concurrency?: number;
 };
 
 function toHex(n: bigint): string {
@@ -162,9 +170,24 @@ async function processBlock(blockNumber: bigint): Promise<number> {
     block.timestamp
   );
   await saveTokenTransfers(tokenTransfers);
+  // NOTE: TokenBalance / Token aggregates are intentionally NOT maintained
+  // here. In reverse order the live incremental guard skips older blocks
+  // (wrong balances) and the shared Token/TokenBalance upserts deadlock under
+  // concurrency. They are recomputed correctly from TokenTransfer after the
+  // backfill instead (order-independent).
 
   const nftTransfers = extractNftTransfers(receipts, block.number, block.timestamp);
   await saveNftTransfers(nftTransfers);
+
+  // All event logs from the same receipts (no extra RPC) -> the "Events" tab.
+  await saveLogs(extractLogs(receipts, block.number, block.timestamp));
+
+  // Best-effort: trace this block's call frames and persist internal txns
+  // idempotently (unique on (txHash, traceAddress)). Env-gated; swallows its
+  // own errors so it can never break the VERIFY + checkpoint logic.
+  if (internalTxIndexingEnabled()) {
+    await indexBlockInternalTransactions(block.number, block.timestamp);
+  }
 
   return rawTxs.length;
 }
@@ -246,10 +269,55 @@ async function resolveRange(options: GaplessBackfillOptions): Promise<{
  * Run the gapless backfill. See the file header for the four safeguards and
  * the env vars. Safe to re-run — resumes from the checkpoint and is idempotent.
  */
+/**
+ * Fetch + store + VERIFY a single block, with one idempotent re-fetch on a
+ * tx-count mismatch. NEVER throws: a total failure (all providers exhausted
+ * or a persistent mismatch) is recorded in the failed-block retry queue (c)
+ * and returned as a short reason string (null on success). On success any
+ * prior failed-queue entry is cleared.
+ */
+async function handleBlock(blockNumber: bigint): Promise<string | null> {
+  try {
+    // (c) RETRY + FALLBACK is inside sendRpc (per-provider backoff + failover).
+    const storedTxCount = await processBlock(blockNumber);
+
+    // (d) VERIFY stored tx count against the chain.
+    let ok = await verifyBlock(blockNumber, storedTxCount);
+    if (!ok) {
+      console.warn(`[gapless] block ${blockNumber} tx-count mismatch — re-fetching once…`);
+      const retryCount = await processBlock(blockNumber); // idempotent re-fetch
+      ok = await verifyBlock(blockNumber, retryCount);
+    }
+
+    if (!ok) {
+      console.error(`[gapless] block ${blockNumber} still mismatched — enqueueing for retry.`);
+      await enqueueFailed(blockNumber);
+      return "tx-count mismatch";
+    }
+
+    // Successful block might have been a prior failure — clear it.
+    await dequeueFailed(blockNumber);
+    return null;
+  } catch (err) {
+    // (c) Total failure (all providers exhausted): record, do NOT skip.
+    const reason = `RPC error: ${err instanceof Error ? err.message : String(err)}`;
+    console.error(`[gapless] block ${blockNumber} failed after failover:`, err);
+    await enqueueFailed(blockNumber);
+    return reason;
+  }
+}
+
 export async function backfillGapless(
   options: GaplessBackfillOptions = {}
 ): Promise<void> {
   const delayMs = options.delayMs ?? BACKFILL_DELAY_MS;
+  const concurrency = Math.max(
+    1,
+    options.concurrency ??
+      (process.env.BACKFILL_CONCURRENCY !== undefined
+        ? Number(process.env.BACKFILL_CONCURRENCY)
+        : 8)
+  );
 
   const range = await resolveRange(options);
   if (!range) {
@@ -262,62 +330,70 @@ export async function backfillGapless(
 
   console.log(
     `[gapless] Backfilling ${direction} ${start} → ${end} ` +
-      `(delay ${delayMs}ms/block)…`
+      `(concurrency ${concurrency}, delay ${delayMs}ms/batch)…`
   );
 
   let processed = 0;
   let failed = 0;
+  // Track the EXACT block numbers that failed, so logs can name them
+  // instead of only counting them (no guessing which blocks need a look).
+  const failedBlocks: bigint[] = [];
 
-  // (a) GAPLESS: single contiguous loop, no gaps. `done` is inclusive of `end`.
+  // (a) GAPLESS: contiguous iteration, no gaps. `done` is inclusive of `end`.
   const done = (b: bigint) => (direction === "reverse" ? b < end : b > end);
 
-  for (let b = start; !done(b); b += step) {
-    try {
-      // (c) RETRY + FALLBACK is inside sendRpc (per-provider backoff + failover).
-      const storedTxCount = await processBlock(b);
-
-      // (d) VERIFY stored tx count against the chain.
-      let ok = await verifyBlock(b, storedTxCount);
-      if (!ok) {
-        console.warn(`[gapless] block ${b} tx-count mismatch — re-fetching once…`);
-        const retryCount = await processBlock(b); // idempotent re-fetch
-        ok = await verifyBlock(b, retryCount);
-      }
-
-      if (!ok) {
-        console.error(`[gapless] block ${b} still mismatched — enqueueing for retry.`);
-        await enqueueFailed(b);
-        failed++;
-      } else {
-        // Successful block might have been a prior failure — clear it.
-        await dequeueFailed(b);
-      }
-
-      // (b) CHECKPOINT after every block so a restart resumes precisely here.
-      await writeCheckpoint(b);
-      processed++;
-    } catch (err) {
-      // (c) Total failure (all providers exhausted): record, do NOT skip.
-      console.error(`[gapless] block ${b} failed after failover:`, err);
-      await enqueueFailed(b);
-      // Still advance the checkpoint so the contiguous cursor keeps moving;
-      // the block is not lost — it lives in the failed-blocks queue.
-      await writeCheckpoint(b);
-      failed++;
+  // Process up to `concurrency` contiguous blocks per step, IN PARALLEL. All
+  // per-block work (fetch + store + VERIFY + retry-once) is idempotent, so a
+  // partially-finished batch is safe to re-run on restart. We CHECKPOINT at
+  // the batch's furthest block; any block that still failed sits in the retry
+  // queue (c). Direction/order is unchanged — only throughput increases.
+  let b = start;
+  while (!done(b)) {
+    const batch: bigint[] = [];
+    for (let i = 0; i < concurrency && !done(b); i++) {
+      batch.push(b);
+      b += step;
     }
 
-    if (processed % 100 === 0 && processed > 0) {
-      console.log(
-        `[gapless] …${processed} block(s) processed · ${failed} failed · at ${b}`
+    // handleBlock never throws — a total failure returns false (already queued).
+    const results = await Promise.all(batch.map((bn) => handleBlock(bn)));
+
+    processed += batch.length;
+    const batchFailed = batch
+      .map((bn, i) => ({ block: bn, reason: results[i] }))
+      .filter(
+        (x): x is { block: bigint; reason: string } => x.reason !== null
+      );
+    failed += batchFailed.length;
+    if (batchFailed.length > 0) {
+      failedBlocks.push(...batchFailed.map((f) => f.block));
+      console.warn(
+        `[gapless] \u26a0 ${batchFailed.length} block(s) FAILED this batch: ` +
+          batchFailed.map((f) => `${f.block} (${f.reason})`).join(", ")
       );
     }
 
-    // Throttle between blocks to respect provider quotas / rate limits.
+    // (b) CHECKPOINT at the batch's furthest (last-iterated) block so a restart
+    // resumes just beyond it — no gap, and idempotency covers any overlap.
+    const lastInBatch = batch[batch.length - 1];
+    await writeCheckpoint(lastInBatch);
+
+    // Log roughly every 100 processed blocks, on batch boundaries.
+    if (
+      Math.floor(processed / 100) !== Math.floor((processed - batch.length) / 100)
+    ) {
+      console.log(
+        `[gapless] …${processed} block(s) processed · ${failed} failed · at ${lastInBatch}`
+      );
+    }
+
+    // Throttle between batches to respect provider quotas / rate limits.
     if (delayMs > 0) await sleep(delayMs);
   }
 
   console.log(
-    `[gapless] Done. Processed ${processed} block(s); ${failed} enqueued for retry.`
+    `[gapless] Done. Processed ${processed} block(s); ${failed} enqueued for retry` +
+      (failedBlocks.length > 0 ? `: ${failedBlocks.join(", ")}` : ".")
   );
 }
 
@@ -338,7 +414,10 @@ export async function retryFailedBlocks(): Promise<void> {
     return;
   }
 
-  console.log(`[gapless] Retrying ${rows.length} failed block(s)…`);
+  const retryList = rows.map((r) => r.value.toString()).join(", ");
+  console.log(
+    `[gapless] Retrying ${rows.length} failed block(s): ${retryList}`
+  );
   let recovered = 0;
 
   for (const { value: b } of rows) {

@@ -12,6 +12,13 @@
  */
 import { BLOCK_EXPLORER_URL } from "@hoodscan/config";
 
+// Bound the external explorer call so an unverified / slow-to-respond address
+// can't stall verification-dependent endpoints (read-contract, verification).
+// A verified contract is cached permanently in our DB after the first hit, so
+// the only repeated cost is the negative (not-verified) case — kept short here
+// and negatively cached in verifiedAbi.ts.
+const BLOCKSCOUT_TIMEOUT_MS = 800;
+
 export interface BlockscoutVerification {
   contractName: string;
   compilerVersion: string;
@@ -70,7 +77,7 @@ export async function fetchBlockscoutVerification(
   try {
     const res = await fetch(url, {
       headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(BLOCKSCOUT_TIMEOUT_MS),
     });
     if (!res.ok) return null; // 404 = not a verified contract there
     data = (await res.json()) as BlockscoutSmartContract;

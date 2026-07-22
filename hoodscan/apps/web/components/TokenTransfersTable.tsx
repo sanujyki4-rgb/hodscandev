@@ -12,9 +12,11 @@ import { EmptyState } from "./EmptyState";
 export function TokenTransfersTable({
   transfers,
   symbol,
+  decimals,
 }: {
   transfers: TokenTransferListRow[];
   symbol: string | null;
+  decimals?: number | null;
 }) {
   if (transfers.length === 0) {
     return <EmptyState message="No transfers found for this token yet." />;
@@ -49,7 +51,7 @@ export function TokenTransfersTable({
               </td>
               <td className="px-4 py-2.5 text-muted">{timeAgo(t.timestamp)}</td>
               <td className="px-4 py-2.5 font-mono">
-                {t.fromIsContract ? <ContractIcon /> : null}
+                {t.fromIsContract ? <ContractIcon address={t.fromAddress} isToken={t.fromIsToken} /> : null}
                 <Link
                   href={`/address/${t.fromAddress}`}
                   className="text-lime hover:underline"
@@ -59,7 +61,7 @@ export function TokenTransfersTable({
                 </Link>
               </td>
               <td className="px-4 py-2.5 font-mono">
-                {t.toIsContract ? <ContractIcon /> : null}
+                {t.toIsContract ? <ContractIcon address={t.toAddress} isToken={t.toIsToken} /> : null}
                 <Link
                   href={`/address/${t.toAddress}`}
                   className="text-lime hover:underline"
@@ -72,7 +74,7 @@ export function TokenTransfersTable({
                 className="px-4 py-2.5 font-mono text-ink"
                 title={t.amount ?? `${t.rawAmount} (raw)`}
               >
-                {shortTokenAmount(t.amount, t.rawAmount)}
+                {shortTokenAmount(t.amount, t.rawAmount, 4, decimals ?? 18)}
                 {symbol ? ` ${symbol}` : ""}
               </td>
             </tr>

@@ -1,0 +1,42 @@
+$kind: http-request
+name: List events by address
+method: GET
+url: '{{baseUrl}}/address/{{address}}/events?limit=20&offset=0'
+order: 11000
+description: |-
+  Event logs emitted by the address (contract). Returns a { total, limit, offset, address, events[] } envelope. Each event includes txHash, logIndex, blockNumber, timestamp, topic0, a topics[] array, raw data, and a best-effort eventName/decoded payload when the signature is known.
+examples: './.resources/List events by address.resources/examples'
+queryParams:
+  - key: limit
+    value: '20'
+  - key: offset
+    value: '0'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test('status is 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('response time is below 2000ms', function () {
+        pm.expect(pm.response.responseTime).to.be.below(2000);
+      });
+      pm.test('body is valid JSON', function () {
+        pm.expect(function () { pm.response.json(); }).to.not.throw();
+      });
+      pm.test('events envelope', function () {
+        var json = pm.response.json();
+        pm.expect(json.address, 'address').to.be.a('string');
+        pm.expect(json.total, 'total').to.be.a('number');
+        pm.expect(json.limit, 'limit').to.be.a('number');
+        pm.expect(json.offset, 'offset').to.be.a('number');
+        pm.expect(json.events, 'events').to.be.an('array');
+      });
+      pm.test('event items are well-formed', function () {
+        var arr = pm.response.json().events;
+        if (Array.isArray(arr) && arr.length > 0) {
+          pm.expect(arr[0].txHash, 'txHash').to.be.a('string');
+          pm.expect(arr[0].topic0, 'topic0').to.be.a('string');
+          pm.expect(arr[0].topics, 'topics').to.be.an('array');
+        }
+      });

@@ -10,6 +10,13 @@
 import { prisma } from "@hoodscan/database";
 import type { AbiFunction } from "viem";
 import { fetchBlockscoutVerification } from "./blockscoutVerification";
+import { redis } from "../middlewares/cache";
+
+// Negative cache: addresses that aren't verified anywhere. Without this, every
+// read-contract / verification request re-hits the slow external explorer for
+// the same unverified address. Positive results are already cached in our DB.
+const UNVERIFIED_TTL = 300; // seconds
+const unverifiedKey = (addr: string) => `hoodscan:unverified:${addr}`;
 
 export interface VerifiedContractRecord {
   address: string;
@@ -68,8 +75,23 @@ export async function getOrFetchVerifiedContract(
   const local = await getVerifiedContract(addr);
   if (local) return local;
 
+  // Skip the slow external explorer for addresses we recently found unverified.
+  try {
+    if (await redis.get(unverifiedKey(addr))) return null;
+  } catch {
+    // ignore cache read failures — fall through to a live fetch
+  }
+
   const remote = await fetchBlockscoutVerification(addr);
-  if (!remote) return null;
+  if (!remote) {
+    // Negatively cache so repeat lookups don't re-hit the explorer.
+    try {
+      await redis.set(unverifiedKey(addr), "1", "EX", UNVERIFIED_TTL);
+    } catch {
+      // ignore cache write failures
+    }
+    return null;
+  }
 
   const data = {
     contractName: remote.contractName,

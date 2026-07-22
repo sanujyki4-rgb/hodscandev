@@ -2,6 +2,7 @@ import {
   ZAN_RPC_URLS,
   UNIBLOCK_RPC_URLS,
   UNIBLOCK_API_KEY,
+  UNIBLOCK_API_KEYS,
   QUICKNODE_RPC_URLS,
   QUICKNODE_MAX_LOG_RANGE_BLOCKS,
   L2_RPC_URLS,
@@ -47,6 +48,12 @@ export type ProviderConfig = {
   /** Extra headers to send (e.g. Uniblock's X-API-KEY). */
   headers?: Record<string, string>;
   /**
+   * Optional per-URL headers, aligned by index with 'urls'. When present it
+   * takes precedence over 'headers' for that URL (used for Uniblock's
+   * per-URL X-API-KEY). An entry may be undefined for URLs needing none.
+   */
+  perUrlHeaders?: Array<Record<string, string> | undefined>;
+  /**
    * Hard limits used by the router to refuse unsafe routes. Currently only
    * the eth_getLogs / range-scan block window is enforced.
    */
@@ -79,6 +86,15 @@ function buildProviders(): ProviderConfig[] {
       urls: UNIBLOCK_RPC_URLS,
       roles: ["trace", "primary"],
       headers: UNIBLOCK_API_KEY ? { "X-API-KEY": UNIBLOCK_API_KEY } : undefined,
+      // Per-URL X-API-KEY: UNIBLOCK_API_KEYS[i] aligned to each URL, falling
+      // back to the last plural key, then the shared singular UNIBLOCK_API_KEY.
+      perUrlHeaders: UNIBLOCK_RPC_URLS.map((_, i) => {
+        const key =
+          UNIBLOCK_API_KEYS[i] ??
+          UNIBLOCK_API_KEYS[UNIBLOCK_API_KEYS.length - 1] ??
+          UNIBLOCK_API_KEY;
+        return key ? { "X-API-KEY": key } : undefined;
+      }),
     });
   }
 
@@ -323,14 +339,17 @@ export async function sendRpc<T = unknown>(
       continue;
     }
 
-    for (const url of provider.urls) {
+    for (let i = 0; i < provider.urls.length; i++) {
+      const url = provider.urls[i];
+      // Prefer this URL's own headers (per-URL key), else the shared headers.
+      const headers = provider.perUrlHeaders?.[i] ?? provider.headers;
       for (let attempt = 0; attempt < retriesPerUrl; attempt++) {
         try {
           return (await postJsonRpc(
             url,
             method,
             params,
-            provider.headers,
+            headers,
             timeoutMs
           )) as T;
         } catch (err) {

@@ -1,0 +1,33 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/transactions/{{txHash}}/user-operations'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "txHash": "0x88df016429689c079f3b2f6ad39fa052532c56795b733da78a91ebe6a713944b",
+        "total": 1,
+        "userOperations": [
+          {
+            "userOpHash": "0x9c2f0a1b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7",
+            "sender": "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
+            "paymaster": null,
+            "nonce": "7",
+            "success": true,
+            "actualGasCost": "215000000000000",
+            "actualGasUsed": "215000",
+            "entryPoint": "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
+            "entryPointVersion": "0.6.0",
+            "logIndex": 12
+          }
+        ]
+      }
+order: 1000

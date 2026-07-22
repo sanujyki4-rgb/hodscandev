@@ -4,15 +4,17 @@ import { Pagination } from "@/components/Pagination";
 import { TokenTransfersTable } from "@/components/TokenTransfersTable";
 import { TokenHoldersTable } from "@/components/TokenHoldersTable";
 import { ExportCsvButton } from "@/components/ExportCsvButton";
-import { ContractIcon } from "@/components/ContractIcon";
+import { TokenLogo } from "@/components/TokenLogo";
 import { CopyIconButton } from "@/components/CopyIconButton";
 import { ContractCodeSection } from "@/components/ContractCodeSection";
 import { TokenAnalytics } from "@/components/TokenAnalytics";
+import { HashTabs, type HashTab } from "@/components/HashTabs";
 import {
   getTokenDetail,
   getVerification,
   getTokenTransfers,
   getTokenHolders,
+  tokenLogoSrc,
   type TokenDetail,
 } from "@/lib/api";
 
@@ -22,31 +24,31 @@ const LIMIT = 25;
 // Holders are listed 100 per page (backend caps page size at 100).
 const HOLDERS_LIMIT = 100;
 
-const TABS = ["transfers", "holders", "info", "contract", "analytics"] as const;
-type Tab = (typeof TABS)[number];
-
-const TAB_LABEL: Record<Tab, string> = {
-  transfers: "Transfers",
-  holders: "Holders",
-  info: "Info",
-  contract: "Contract",
-  analytics: "Analytics",
-};
+// Arbiscan-style URL hash slug per tab. The active tab lives in the URL
+// fragment (e.g. /token/0x..#transactions), never in a ?tab= query param.
+const TAB_HASH = {
+  transfers: "transactions",
+  holders: "holders",
+  info: "info",
+  contract: "code",
+  analytics: "analytics",
+  cards: "cards",
+} as const;
 
 export default async function TokenDetailPage({
   params,
   searchParams,
 }: {
   params: { address: string };
-  searchParams: { tab?: string; page?: string };
+  // Transfers and holders paginate independently (tp / hp) so both keep their
+  // own page while the active tab is tracked purely by the URL hash.
+  searchParams: { tp?: string; hp?: string };
 }) {
   const address = params.address.toLowerCase();
-  const tab: Tab = (TABS as readonly string[]).includes(searchParams.tab ?? "")
-    ? (searchParams.tab as Tab)
-    : "transfers";
-  const page = Math.max(Number(searchParams.page) || 1, 1);
-  const pageLimit = tab === "holders" ? HOLDERS_LIMIT : LIMIT;
-  const offset = (page - 1) * pageLimit;
+  const transfersPage = Math.max(Number(searchParams.tp) || 1, 1);
+  const holdersPage = Math.max(Number(searchParams.hp) || 1, 1);
+  const transfersOffset = (transfersPage - 1) * LIMIT;
+  const holdersOffset = (holdersPage - 1) * HOLDERS_LIMIT;
 
   const detail = await getTokenDetail(address);
   if (detail === null) notFound();
@@ -58,20 +60,145 @@ export default async function TokenDetailPage({
   const title = detail.name ?? "Unknown Token";
   const symbol = detail.symbol;
 
-  const transfersData = tab === "transfers" ? await getTokenTransfers(address, LIMIT, offset) : null;
-  const holdersData = tab === "holders" ? await getTokenHolders(address, HOLDERS_LIMIT, offset) : null;
+  // Both datasets are loaded up-front because the tab is chosen client-side
+  // (from the URL hash), so the server can't know which one is visible.
+  const [transfersData, holdersData] = await Promise.all([
+    getTokenTransfers(address, LIMIT, transfersOffset),
+    getTokenHolders(address, HOLDERS_LIMIT, holdersOffset),
+  ]);
 
   const supplyDisplay =
     detail.totalSupply !== null
       ? `${detail.totalSupply}${symbol ? ` ${symbol}` : ""}`
       : "—";
 
+  const verifiedBadge = contractVerified ? (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="ml-1 inline-block h-3.5 w-3.5 align-text-top text-lime"
+      aria-label="Verified"
+    >
+      <path
+        fillRule="evenodd"
+        d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0l-3.5-3.5a1 1 0 111.4-1.4l2.8 2.8 6.8-6.8a1 1 0 011.4 0z"
+        clipRule="evenodd"
+      />
+    </svg>
+  ) : null;
+
+  const tabs: HashTab[] = [
+    {
+      id: "transfers",
+      hash: TAB_HASH.transfers,
+      label: "Transfers",
+      content:
+        transfersData === null ? (
+          <ApiError />
+        ) : (
+          <>
+            <div className="flex justify-end">
+              <ExportCsvButton
+                filename={`transfers-${address}.csv`}
+                headers={["Tx Hash", "Timestamp", "From", "To", "Amount", "Symbol"]}
+                rows={transfersData.transfers.map((t) => [
+                  t.txHash,
+                  new Date(t.timestamp).toISOString(),
+                  t.fromAddress,
+                  t.toAddress,
+                  t.amount ?? `${t.rawAmount} (raw)`,
+                  symbol ?? "",
+                ])}
+              />
+            </div>
+            <TokenTransfersTable transfers={transfersData.transfers} symbol={symbol} decimals={detail.decimals} />
+            <Pagination
+              basePath={`/token/${address}`}
+              page={transfersPage}
+              limit={transfersData.limit}
+              total={transfersData.total}
+              noun="transfers"
+              pageParam="tp"
+              hashSuffix={`#${TAB_HASH.transfers}`}
+            />
+          </>
+        ),
+    },
+    {
+      id: "holders",
+      hash: TAB_HASH.holders,
+      label: "Holders",
+      content:
+        holdersData === null ? (
+          <ApiError />
+        ) : (
+          <>
+            <div className="flex justify-end">
+              <ExportCsvButton
+                filename={`holders-${address}.csv`}
+                headers={["Rank", "Address", "Balance", "Percentage", "Symbol"]}
+                rows={holdersData.holders.map((h) => [
+                  String(h.rank),
+                  h.address,
+                  h.balance ?? `${h.rawBalance} (raw)`,
+                  h.percentage !== null && h.percentage !== undefined
+                    ? `${h.percentage}%`
+                    : "",
+                  symbol ?? "",
+                ])}
+              />
+            </div>
+            <TokenHoldersTable holders={holdersData.holders} symbol={symbol} />
+            <Pagination
+              basePath={`/token/${address}`}
+              page={holdersPage}
+              limit={holdersData.limit}
+              total={holdersData.total}
+              noun="holders"
+              pageParam="hp"
+              hashSuffix={`#${TAB_HASH.holders}`}
+            />
+          </>
+        ),
+    },
+    {
+      id: "info",
+      hash: TAB_HASH.info,
+      label: "Info",
+      content: <TokenInfo detail={detail} supplyDisplay={supplyDisplay} />,
+    },
+    {
+      id: "contract",
+      hash: TAB_HASH.contract,
+      label: "Contract",
+      badge: verifiedBadge,
+      content: <ContractCodeSection address={address} />,
+    },
+    {
+      id: "analytics",
+      hash: TAB_HASH.analytics,
+      label: "Analytics",
+      content: <TokenAnalytics address={address} />,
+    },
+    {
+      id: "cards",
+      hash: TAB_HASH.cards,
+      label: "Cards",
+      content: (
+        <TokenSurfacePlaceholder
+          title="Cards"
+          hint="Cards is an explorer product surface we have not implemented."
+        />
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <ContractIcon />
+          <TokenLogo address={detail.tokenAddress} symbol={symbol} logoUrl={tokenLogoSrc(detail.logo)} size={32} />
           <h1 className="font-display text-2xl font-bold tracking-tight">
             {title}
             {symbol ? (
@@ -95,89 +222,8 @@ export default async function TokenDetailPage({
         <SummaryCard label="Holders" value={detail.holderCount.toLocaleString("en-US")} />
       </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {TABS.map((t) => (
-          <TabLink key={t} address={address} tab={t} active={tab === t}>
-            {TAB_LABEL[t]}
-            {t === "contract" && contractVerified && (
-              <svg viewBox="0 0 20 20" fill="currentColor" className="ml-1 inline-block h-3.5 w-3.5 align-text-top text-lime" aria-label="Verified">
-                <path fillRule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-7.5 7.5a1 1 0 01-1.4 0l-3.5-3.5a1 1 0 111.4-1.4l2.8 2.8 6.8-6.8a1 1 0 011.4 0z" clipRule="evenodd" />
-              </svg>
-            )}
-          </TabLink>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {tab === "transfers" ? (
-        transfersData === null ? (
-          <ApiError />
-        ) : (
-          <>
-            <div className="flex justify-end">
-              <ExportCsvButton
-                filename={`transfers-${address}.csv`}
-                headers={["Tx Hash", "Timestamp", "From", "To", "Amount", "Symbol"]}
-                rows={transfersData.transfers.map((t) => [
-                  t.txHash,
-                  new Date(t.timestamp).toISOString(),
-                  t.fromAddress,
-                  t.toAddress,
-                  t.amount ?? `${t.rawAmount} (raw)`,
-                  symbol ?? "",
-                ])}
-              />
-            </div>
-            <TokenTransfersTable transfers={transfersData.transfers} symbol={symbol} />
-            <Pagination
-              basePath={`/token/${address}`}
-              page={page}
-              limit={transfersData.limit}
-              total={transfersData.total}
-              noun="transfers"
-              queryPrefix="tab=transfers&"
-            />
-          </>
-        )
-      ) : tab === "holders" ? (
-        holdersData === null ? (
-          <ApiError />
-        ) : (
-          <>
-            <div className="flex justify-end">
-              <ExportCsvButton
-                filename={`holders-${address}.csv`}
-                headers={["Rank", "Address", "Balance", "Percentage", "Symbol"]}
-                rows={holdersData.holders.map((h) => [
-                  String(h.rank),
-                  h.address,
-                  h.balance ?? `${h.rawBalance} (raw)`,
-                  h.percentage !== null && h.percentage !== undefined
-                    ? `${h.percentage}%`
-                    : "",
-                  symbol ?? "",
-                ])}
-              />
-            </div>
-            <TokenHoldersTable holders={holdersData.holders} symbol={symbol} />
-            <Pagination
-              basePath={`/token/${address}`}
-              page={page}
-              limit={holdersData.limit}
-              total={holdersData.total}
-              noun="holders"
-              queryPrefix="tab=holders&"
-            />
-          </>
-        )
-      ) : tab === "info" ? (
-        <TokenInfo detail={detail} supplyDisplay={supplyDisplay} />
-      ) : tab === "contract" ? (
-        <ContractCodeSection address={address} />
-      ) : (
-        <TokenAnalytics address={address} />
-      )}
+      {/* Hash-driven tabs (Arbiscan-style #transactions URLs) */}
+      <HashTabs tabs={tabs} />
     </div>
   );
 }
@@ -227,26 +273,13 @@ function TokenInfo({ detail, supplyDisplay }: { detail: TokenDetail; supplyDispl
   );
 }
 
-function TabLink({
-  address,
-  tab,
-  active,
-  children,
-}: {
-  address: string;
-  tab: Tab;
-  active: boolean;
-  children: React.ReactNode;
-}) {
+function TokenSurfacePlaceholder({ title, hint }: { title: string; hint: string }) {
   return (
-    <Link
-      href={`/token/${address}?tab=${tab}`}
-      className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
-        active ? "border-lime text-ink" : "border-transparent text-muted hover:text-ink"
-      }`}
-    >
-      {children}
-    </Link>
+    <div className="rounded-xl border border-dashed border-border bg-surface px-6 py-12 text-center">
+      <p className="text-sm font-medium text-ink">{title}</p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted">{hint}</p>
+      <p className="mt-4 text-xs text-muted">Coming soon · not available</p>
+    </div>
   );
 }
 

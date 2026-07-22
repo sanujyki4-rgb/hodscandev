@@ -17,6 +17,24 @@ export async function listLatestBlocks(req: Request, res: Response) {
 
   const [blocks, total] = await Promise.all([
     prisma.block.findMany({
+      // Explicit scalar select: keeps the JSON shape identical while
+      // guaranteeing the `transactions` relation is never lazily loaded
+      // for the list view (only the block header fields are needed here).
+      select: {
+        number: true,
+        hash: true,
+        parentHash: true,
+        timestamp: true,
+        gasUsed: true,
+        gasLimit: true,
+        baseFeePerGas: true,
+        l1BlockNumber: true,
+        sendCount: true,
+        sendRoot: true,
+        size: true,
+        txCount: true,
+        isFinalized: true,
+      },
       orderBy: { number: "desc" },
       take: limit,
       skip: offset,

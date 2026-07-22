@@ -12,6 +12,7 @@ import {
 import { resolveContract, splitAbi } from "../utils/verifiedAbi";
 
 import { ADDRESS_RE } from "../utils/address";
+import { redis } from "../middlewares/cache";
 
 /** Shape returned for a single read function in the list response. */
 interface ReadFunctionResponse {
@@ -28,6 +29,38 @@ interface ReadFunctionResponse {
  * zero-argument reads against the RPC node (best-effort: a revert yields
  * null). Shared by the verified-ABI and standard-ABI paths.
  */
+// Cache/timeout tuning for eager zero-arg read resolution. Live eth_call
+// per function was the dominant latency on GET /read-contract; bounding
+// each call and caching the value keeps the list snappy.
+const READ_VALUE_TTL = 45; // seconds — cache a successful zero-arg read
+const READ_NULL_TTL = 10; // seconds — briefly cache reverts/timeouts
+const READ_RPC_TIMEOUT_MS = 1500;
+
+/**
+ * Resolve a single zero-arg read value with a hard timeout so one slow or
+ * hanging RPC call can't stall the whole read-contract response. Returns
+ * null on timeout, revert, or any error.
+ */
+async function readWithTimeout(address: string, fn: AbiFunction): Promise<string | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), READ_RPC_TIMEOUT_MS);
+  });
+  try {
+    const call = readRpcClient
+      .readContract({
+        address: address as `0x${string}`,
+        abi: [fn] as unknown as Abi,
+        functionName: fn.name,
+      })
+      .then((result) => displayReadResult(result))
+      .catch(() => null);
+    return await Promise.race([call, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function resolveReadFunction(
   address: string,
   fn: AbiFunction
@@ -38,15 +71,32 @@ async function resolveReadFunction(
 
   let value: string | null = null;
   if (!hasInputs) {
+    const cacheKey = `hoodscan:readfn:${address}:${fn.name}`;
+    // 1. Best-effort cache hit. An empty-string sentinel means "cached null".
     try {
-      const result = await readRpcClient.readContract({
-        address: address as `0x${string}`,
-        abi: [fn] as unknown as Abi,
-        functionName: fn.name,
-      });
-      value = displayReadResult(result);
+      const cached = await redis.get(cacheKey);
+      if (cached !== null) {
+        return {
+          name: fn.name,
+          stateMutability: fn.stateMutability,
+          inputs,
+          outputs,
+          hasInputs,
+          value: cached === "" ? null : cached,
+        };
+      }
     } catch {
-      value = null;
+      // ignore cache read failures — fall through to a live read
+    }
+
+    // 2. Live read, bounded by a timeout.
+    value = await readWithTimeout(address, fn);
+
+    // 3. Best-effort cache write (short TTL for nulls, longer for values).
+    try {
+      await redis.set(cacheKey, value ?? "", "EX", value === null ? READ_NULL_TTL : READ_VALUE_TTL);
+    } catch {
+      // ignore cache write failures
     }
   }
 

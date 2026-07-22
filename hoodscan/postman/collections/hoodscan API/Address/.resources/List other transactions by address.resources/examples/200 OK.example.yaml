@@ -1,0 +1,41 @@
+$kind: http-example
+name: '200 OK'
+request:
+  url: '{{baseUrl}}/address/{{address}}/other-transactions?limit=20&offset=0'
+  method: GET
+response:
+  statusCode: 200
+  statusText: 'OK'
+  headers:
+    - key: Content-Type
+      value: application/json
+  body:
+    type: json
+    content: |-
+      {
+        "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "label": null,
+        "isContract": true,
+        "isToken": false,
+        "total": 3,
+        "limit": 20,
+        "offset": 0,
+        "transactions": [
+          {
+            "hash": "0x2f1caa0000000000000000000000000000000000000000000000000000009ab0",
+            "blockNumber": "14571309",
+            "transactionIndex": 0,
+            "fromAddress": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "toAddress": null,
+            "value": "0",
+            "gasUsed": "1200000",
+            "status": 1,
+            "method": "Contract Creation",
+            "block": {
+              "timestamp": "1699999999",
+              "isFinalized": true
+            }
+          }
+        ]
+      }
+order: 1000

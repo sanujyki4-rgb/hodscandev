@@ -10,6 +10,8 @@ export function Pagination({
   noun = "records",
   cappedAt = DEFAULT_CAP,
   queryPrefix = "",
+  pageParam = "page",
+  hashSuffix = "",
 }: {
   basePath: string;
   page: number;
@@ -18,6 +20,8 @@ export function Pagination({
   noun?: string;
   cappedAt?: number;
   queryPrefix?: string;
+  pageParam?: string;
+  hashSuffix?: string;
 }) {
   const totalPages = Math.max(Math.ceil(total / limit), 1);
   const hasPrev = page > 1;
@@ -39,14 +43,14 @@ export function Pagination({
       </span>
       <div className="flex items-center gap-2">
         <Link
-          href={hasPrev ? `${basePath}?${queryPrefix}page=1` : "#"}
+          href={hasPrev ? `${basePath}?${queryPrefix}${pageParam}=1${hashSuffix}` : "#"}
           aria-disabled={!hasPrev}
           className={linkClass(hasPrev)}
         >
           First
         </Link>
         <Link
-          href={hasPrev ? `${basePath}?${queryPrefix}page=${page - 1}` : "#"}
+          href={hasPrev ? `${basePath}?${queryPrefix}${pageParam}=${page - 1}${hashSuffix}` : "#"}
           aria-disabled={!hasPrev}
           className={linkClass(hasPrev)}
         >
@@ -56,14 +60,14 @@ export function Pagination({
           Page {page.toLocaleString()} of {totalPages.toLocaleString()}
         </span>
         <Link
-          href={hasNext ? `${basePath}?${queryPrefix}page=${page + 1}` : "#"}
+          href={hasNext ? `${basePath}?${queryPrefix}${pageParam}=${page + 1}${hashSuffix}` : "#"}
           aria-disabled={!hasNext}
           className={linkClass(hasNext)}
         >
           Next →
         </Link>
         <Link
-          href={hasNext ? `${basePath}?${queryPrefix}page=${totalPages}` : "#"}
+          href={hasNext ? `${basePath}?${queryPrefix}${pageParam}=${totalPages}${hashSuffix}` : "#"}
           aria-disabled={!hasNext}
           className={linkClass(hasNext)}
         >

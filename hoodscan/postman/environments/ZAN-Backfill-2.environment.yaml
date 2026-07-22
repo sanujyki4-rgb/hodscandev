@@ -1,0 +1,8 @@
+name: ZAN-Backfill-2
+values:
+  - key: baseUrl
+    value: 'https://api.zan.top/node/v1/robinhood/mainnet/f0160c0271084d74b3f297c3494caeff'
+  - key: apiKey
+    value: ''
+  - key: providerRole
+    value: 'bulk endpoint #2 (cadangan ZAN) - kuota terpisah, log range 10.000 blok'
